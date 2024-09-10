@@ -4,7 +4,7 @@ use anyhow::{anyhow, bail, Context};
 use std::fmt::Display;
 
 #[derive(Debug, Clone, PartialEq)]
-enum RuntimeValue {
+pub enum RuntimeValue {
     Bool(bool),
     Null,
     Number(f64),
@@ -84,10 +84,13 @@ impl From<&LiteralValue> for RuntimeValue {
     }
 }
 
-struct Interpreter {}
+pub struct Interpreter {}
 
 impl Interpreter {
-    fn interpret(&mut self, expr: &Expr) -> anyhow::Result<RuntimeValue> {
+    pub fn new() -> Self {
+        Self {}
+    }
+    pub fn interpret(&mut self, expr: &Expr) -> anyhow::Result<RuntimeValue> {
         self.evaluate_expr(expr)
     }
 
@@ -132,14 +135,8 @@ impl Interpreter {
                             <= TryInto::<f64>::try_into(right_value)?,
                     )),
 
-                    TokenType::BangEqual => Ok(RuntimeValue::Bool(
-                        TryInto::<f64>::try_into(left_value)?
-                            != TryInto::<f64>::try_into(right_value)?,
-                    )),
-                    TokenType::EqualEqual => Ok(RuntimeValue::Bool(
-                        TryInto::<f64>::try_into(left_value)?
-                            == TryInto::<f64>::try_into(right_value)?,
-                    )),
+                    TokenType::BangEqual => Ok(RuntimeValue::Bool(left_value != right_value)),
+                    TokenType::EqualEqual => Ok(RuntimeValue::Bool(left_value == right_value)),
 
                     TokenType::Plus => match (left_value.clone(), right_value.clone()) {
                         (RuntimeValue::Number(left_num), RuntimeValue::Number(right_num)) => {

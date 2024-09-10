@@ -3,14 +3,14 @@ use crate::representation::token::Token;
 use crate::representation::token::TokenType::*;
 use anyhow::bail;
 
-struct Lexer<'a> {
+pub struct Lexer<'a> {
     source: &'a str,
     index: usize,
     line: usize,
 }
 
 impl<'a> Lexer<'a> {
-    fn new(source: &'a str) -> Self {
+    pub fn new(source: &'a str) -> Self {
         Self {
             source,
             line: 0,
@@ -18,7 +18,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn scan_tokens(&mut self) -> anyhow::Result<Vec<Token>> {
+    pub fn scan_tokens(&mut self) -> anyhow::Result<Vec<Token>> {
         let mut tokens: Vec<Token> = Vec::new();
 
         loop {
@@ -153,7 +153,7 @@ impl<'a> Lexer<'a> {
                             continue;
                         }
                         _ => {
-                            unimplemented!()
+                            bail!("invalid character")
                         }
                     };
                     tokens.push(Token::new(
@@ -261,9 +261,26 @@ mod tests {
             Token::new(LessEqual, "<=".to_string(), 3),
             Token::new(EqualEqual, "==".to_string(), 3),
         ];
+
         let mut lexer = Lexer::new(input);
         let got = lexer.scan_tokens().unwrap();
         assert_eq!(expected, got);
+
+        let input = "(1+2)*3";
+        let mut lexer = Lexer::new(input);
+        let got = lexer.scan_tokens().unwrap();
+        assert_eq!(
+            got,
+            vec![
+                Token::new(LeftParen, "(".to_string(), 0),
+                Token::new(Number(1.), "1".to_string(), 0),
+                Token::new(Plus, "+".to_string(), 0),
+                Token::new(Number(2.), "2".to_string(), 0),
+                Token::new(RightParen, ")".to_string(), 0),
+                Token::new(Star, "*".to_string(), 0),
+                Token::new(Number(3.), "3".to_string(), 0),
+            ]
+        );
     }
 
     #[test]

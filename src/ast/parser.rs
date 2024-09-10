@@ -14,7 +14,7 @@ use anyhow::{bail, Context};
 //                | primary ;
 // primary        → NUMBER | STRING | "true" | "false" | "nil"
 //                | "(" expression ")" ;
-struct Parser<'a> {
+pub struct Parser<'a> {
     tokens: Vec<Token<'a>>,
 
     /// Points to the next token waiting to be parsed.
@@ -22,12 +22,12 @@ struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    fn new(tokens: Vec<Token<'a>>) -> Self {
+    pub fn new(tokens: Vec<Token<'a>>) -> Self {
         Self { tokens, current: 0 }
     }
 
     /// Starts parsing process.
-    fn parse(&mut self) -> anyhow::Result<Expr<'a>> {
+    pub fn parse(&mut self) -> anyhow::Result<Expr<'a>> {
         self.expression()
     }
 
@@ -124,13 +124,13 @@ impl<'a> Parser<'a> {
                 TokenType::String(string) => Literal(LiteralValue::String(string.to_string())),
                 TokenType::Number(number) => Literal(LiteralValue::Number(number)),
                 TokenType::LeftParen => {
-                    self.current += 1; //consume
+                    self.current += 1; // consume
                     let expression = self.expression()?;
                     self.consume(TokenType::RightParen)
                         .context("expected ')' after expression")?;
-                    Expr::Grouping {
+                    return Ok(Expr::Grouping {
                         expression: Box::new(expression),
-                    }
+                    });
                 }
                 _ => bail!("expression expected, {:?}", token),
             },
@@ -168,7 +168,6 @@ impl<'a> Parser<'a> {
 
     fn consume(&mut self, check_type: TokenType) -> anyhow::Result<()> {
         if let Some(_) = self.match_token_types(&[check_type]) {
-            self.current += 1;
             return Ok(());
         }
 
@@ -261,7 +260,22 @@ mod tests {
             result.is_ok(),
             "Parser should successfully parse the expression"
         );
-        let result = result.unwrap();
-        assert_eq!("(+ 1 (group (* 2 3)))".to_string(), result.to_string())
+        assert_eq!(
+            "(+ 1 (group (* 2 3)))".to_string(),
+            result.unwrap().to_string()
+        );
+
+        let tokens = vec![
+            Token::new(TokenType::LeftParen, "(".to_string(), 0),
+            Token::new(TokenType::Number(1.), "1".to_string(), 0),
+            Token::new(TokenType::Plus, "+".to_string(), 0),
+            Token::new(TokenType::Number(2.), "2".to_string(), 0),
+            Token::new(TokenType::RightParen, ")".to_string(), 0),
+            Token::new(TokenType::Star, "*".to_string(), 0),
+            Token::new(TokenType::Number(3.), "3".to_string(), 0),
+        ];
+        let mut parser = Parser::new(tokens);
+        let result = parser.parse().unwrap();
+        assert_eq!("(* (group (+ 1 2)) 3)".to_string(), result.to_string());
     }
 }
