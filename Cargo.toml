@@ -9,3 +9,7 @@ edition = "2021"
 anyhow = "1.0.86"
 clap = { version = "4.5.17", features = ["default", "derive"] }
 lazy_static = "1.5.0"
+
+[dev-dependencies]
+assert_cmd = "2.0.14"
+predicates = "3.1.0"
