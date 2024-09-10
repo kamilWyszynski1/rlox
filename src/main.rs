@@ -38,13 +38,24 @@ fn main() -> anyhow::Result<()> {
                 return Ok(());
             }
             let mut lexer = Lexer::new(&input);
-            let tokens = lexer.scan_tokens()?;
-            let mut pareser = parser::Parser::new(tokens);
-            let expressions = pareser.parse()?;
-            let mut interpreter = Interpreter::new();
-            let result = interpreter.interpret(&expressions)?;
-            println!("{:?}", result);
+            match lexer.scan_tokens() {
+                Ok(tokens) => {
+                    let mut pareser = parser::Parser::new(tokens);
+                    match pareser.parse() {
+                        Ok(expressions) => {
+                            let mut interpreter = Interpreter::new();
+                            match interpreter.interpret(expressions) {
+                                Ok(_) => {}
+                                Err(err) => {
+                                    eprintln!("{}", err)
+                                }
+                            }
+                        }
+                        Err(err) => eprintln!("{}", err),
+                    }
+                }
+                Err(err) => eprintln!("{}", err),
+            }
         },
     }
-    Ok(())
 }

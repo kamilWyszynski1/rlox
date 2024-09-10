@@ -1,9 +1,18 @@
 use crate::ast::ast::Expr::Literal;
-use crate::ast::ast::{Expr, LiteralValue};
+use crate::ast::ast::{Expr, LiteralValue, Stmt};
+use crate::representation::token::TokenType::Print;
 use crate::representation::token::{Token, TokenType};
 use anyhow::{bail, Context};
 
 // Grammar:
+//
+// program        → statement* EOF ;
+//
+// statement      → exprStmt
+//                | printStmt ;
+//
+// exprStmt       → expression ";" ;
+// printStmt      → "print" expression ";" ;
 //
 // expression     → equality ;
 // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
@@ -27,8 +36,32 @@ impl<'a> Parser<'a> {
     }
 
     /// Starts parsing process.
-    pub fn parse(&mut self) -> anyhow::Result<Expr<'a>> {
-        self.expression()
+    pub fn parse(&mut self) -> anyhow::Result<Vec<Stmt<'a>>> {
+        // self.expression()
+        let mut statements = Vec::new();
+        while !self.is_at_end() {
+            statements.push(self.statement()?);
+        }
+        Ok(statements)
+    }
+
+    fn statement(&mut self) -> anyhow::Result<Stmt<'a>> {
+        match self.match_token_types(&[Print]) {
+            Some(_) => self.print_statement(),
+            None => self.expression_statement(),
+        }
+    }
+
+    fn print_statement(&mut self) -> anyhow::Result<Stmt<'a>> {
+        let value = self.expression()?;
+        self.consume(TokenType::Semicolon)?;
+        Ok(Stmt::Print { expression: value })
+    }
+
+    fn expression_statement(&mut self) -> anyhow::Result<Stmt<'a>> {
+        let expression = self.expression()?;
+        self.consume(TokenType::Semicolon)?;
+        Ok(Stmt::Expression { expression })
     }
 
     fn expression(&mut self) -> anyhow::Result<Expr<'a>> {
@@ -172,7 +205,7 @@ impl<'a> Parser<'a> {
         }
 
         let token = self.peek();
-        bail!("unexpected token {:?}", token);
+        bail!("unexpected token {:?}, expected: {:?}", token, check_type);
     }
 
     fn is_at_end(&mut self) -> bool {
@@ -216,53 +249,21 @@ mod tests {
     fn test_parse() {
         // Define some tokens for the expression: 1 + (2 * 3)
         let tokens = vec![
-            Token {
-                token_type: TokenType::Number(1.0),
-                lexeme: "1".to_string(),
-                line: 1,
-            },
-            Token {
-                token_type: TokenType::Plus,
-                lexeme: "+".to_string(),
-                line: 1,
-            },
-            Token {
-                token_type: TokenType::LeftParen,
-                lexeme: "(".to_string(),
-                line: 1,
-            },
-            Token {
-                token_type: TokenType::Number(2.0),
-                lexeme: "2".to_string(),
-                line: 1,
-            },
-            Token {
-                token_type: TokenType::Star,
-                lexeme: "*".to_string(),
-                line: 1,
-            },
-            Token {
-                token_type: TokenType::Number(3.0),
-                lexeme: "3".to_string(),
-                line: 1,
-            },
-            Token {
-                token_type: TokenType::RightParen,
-                lexeme: ")".to_string(),
-                line: 1,
-            },
+            Token::new(TokenType::Number(1.0), "1".to_string(), 1),
+            Token::new(TokenType::Plus, "+".to_string(), 1),
+            Token::new(TokenType::LeftParen, "(".to_string(), 1),
+            Token::new(TokenType::Number(2.0), "2".to_string(), 1),
+            Token::new(TokenType::Star, "*".to_string(), 1),
+            Token::new(TokenType::Number(3.0), "3".to_string(), 1),
+            Token::new(TokenType::RightParen, ")".to_string(), 1),
+            Token::new(TokenType::Semicolon, ";".to_string(), 1),
         ];
 
         let mut parser = Parser::new(tokens);
         let result = parser.parse();
-
-        assert!(
-            result.is_ok(),
-            "Parser should successfully parse the expression"
-        );
         assert_eq!(
             "(+ 1 (group (* 2 3)))".to_string(),
-            result.unwrap().to_string()
+            result.unwrap()[0].to_string()
         );
 
         let tokens = vec![
@@ -273,9 +274,10 @@ mod tests {
             Token::new(TokenType::RightParen, ")".to_string(), 0),
             Token::new(TokenType::Star, "*".to_string(), 0),
             Token::new(TokenType::Number(3.), "3".to_string(), 0),
+            Token::new(TokenType::Semicolon, ";".to_string(), 0),
         ];
         let mut parser = Parser::new(tokens);
         let result = parser.parse().unwrap();
-        assert_eq!("(* (group (+ 1 2)) 3)".to_string(), result.to_string());
+        assert_eq!("(* (group (+ 1 2)) 3)".to_string(), result[0].to_string());
     }
 }

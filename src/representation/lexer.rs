@@ -281,6 +281,17 @@ mod tests {
                 Token::new(Number(3.), "3".to_string(), 0),
             ]
         );
+
+        let input = r#"print "lol""#;
+        let mut lexer = Lexer::new(input);
+        let got = lexer.scan_tokens().unwrap();
+        assert_eq!(
+            got,
+            vec![
+                Token::new(Print, "print".to_string(), 0),
+                Token::new(String("lol"), "lol".to_string(), 0),
+            ]
+        );
     }
 
     #[test]

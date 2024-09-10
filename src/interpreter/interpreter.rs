@@ -1,4 +1,4 @@
-use crate::ast::ast::{Expr, LiteralValue};
+use crate::ast::ast::{Expr, LiteralValue, Stmt};
 use crate::representation::token::TokenType;
 use anyhow::{anyhow, bail, Context};
 use std::fmt::Display;
@@ -90,8 +90,24 @@ impl Interpreter {
     pub fn new() -> Self {
         Self {}
     }
-    pub fn interpret(&mut self, expr: &Expr) -> anyhow::Result<RuntimeValue> {
-        self.evaluate_expr(expr)
+    pub fn interpret(&mut self, statements: Vec<Stmt>) -> anyhow::Result<()> {
+        // self.evaluate_expr(expr)
+        for statement in statements {
+            self.execute(statement)?;
+        }
+        Ok(())
+    }
+
+    fn execute(&mut self, statement: Stmt) -> anyhow::Result<()> {
+        match statement {
+            Stmt::Expression { expression } => {
+                self.evaluate_expr(&expression)?;
+            }
+            Stmt::Print { expression } => {
+                println!("{}", self.evaluate_expr(&expression)?);
+            }
+        }
+        Ok(())
     }
 
     fn evaluate_expr(&self, expr: &Expr) -> anyhow::Result<RuntimeValue> {
@@ -245,75 +261,75 @@ mod tests {
 
     #[test]
     fn test_literal_number() {
-        let mut interpreter = Interpreter {};
+        let interpreter = Interpreter {};
         let expr = literal_number(42.0);
-        let result = interpreter.interpret(&expr).unwrap();
+        let result = interpreter.evaluate_expr(&expr).unwrap();
         assert_eq!(result, RuntimeValue::Number(42.0));
     }
 
     #[test]
     fn test_literal_string() {
-        let mut interpreter = Interpreter {};
+        let interpreter = Interpreter {};
         let expr = literal_string("hello");
-        let result = interpreter.interpret(&expr).unwrap();
+        let result = interpreter.evaluate_expr(&expr).unwrap();
         assert_eq!(result, RuntimeValue::String("hello".to_string()));
     }
 
     #[test]
     fn test_literal_bool() {
-        let mut interpreter = Interpreter {};
+        let interpreter = Interpreter {};
         let expr = literal_bool(true);
-        let result = interpreter.interpret(&expr).unwrap();
+        let result = interpreter.evaluate_expr(&expr).unwrap();
         assert_eq!(result, RuntimeValue::Bool(true));
     }
 
     #[test]
     fn test_literal_null() {
-        let mut interpreter = Interpreter {};
+        let interpreter = Interpreter {};
         let expr = literal_null();
-        let result = interpreter.interpret(&expr).unwrap();
+        let result = interpreter.evaluate_expr(&expr).unwrap();
         assert_eq!(result, RuntimeValue::Null);
     }
 
     #[test]
     fn test_binary_addition_numbers() {
-        let mut interpreter = Interpreter {};
+        let interpreter = Interpreter {};
         let expr = binary(literal_number(1.0), TokenType::Plus, literal_number(2.0));
-        let result = interpreter.interpret(&expr).unwrap();
+        let result = interpreter.evaluate_expr(&expr).unwrap();
         assert_eq!(result, RuntimeValue::Number(3.0));
     }
 
     #[test]
     fn test_binary_addition_strings() {
-        let mut interpreter = Interpreter {};
+        let interpreter = Interpreter {};
         let expr = binary(
             literal_string("foo"),
             TokenType::Plus,
             literal_string("bar"),
         );
-        let result = interpreter.interpret(&expr).unwrap();
+        let result = interpreter.evaluate_expr(&expr).unwrap();
         assert_eq!(result, RuntimeValue::String("foobar".to_string()));
     }
 
     #[test]
     fn test_unary_minus_number() {
-        let mut interpreter = Interpreter {};
+        let interpreter = Interpreter {};
         let expr = unary(TokenType::Minus, literal_number(42.0));
-        let result = interpreter.interpret(&expr).unwrap();
+        let result = interpreter.evaluate_expr(&expr).unwrap();
         assert_eq!(result, RuntimeValue::Number(-42.0));
     }
 
     #[test]
     fn test_binary_greater() {
-        let mut interpreter = Interpreter {};
+        let interpreter = Interpreter {};
         let expr = binary(literal_number(3.0), TokenType::Greater, literal_number(1.0));
-        let result = interpreter.interpret(&expr).unwrap();
+        let result = interpreter.evaluate_expr(&expr).unwrap();
         assert_eq!(result, RuntimeValue::Bool(true));
     }
 
     #[test]
     fn test_grouped_operations() {
-        let mut interpreter = Interpreter {};
+        let interpreter = Interpreter {};
         let expr = Expr::Binary {
             left: Box::new(Expr::Literal(Number(1.))),
             operator: Token {
@@ -335,7 +351,7 @@ mod tests {
         };
 
         assert_eq!(
-            interpreter.interpret(&expr).unwrap(),
+            interpreter.evaluate_expr(&expr).unwrap(),
             RuntimeValue::Number(7.0)
         );
     }

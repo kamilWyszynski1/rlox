@@ -1,5 +1,27 @@
 use crate::representation::token::Token;
 
+pub enum Stmt<'a> {
+    Expression { expression: Expr<'a> },
+    Print { expression: Expr<'a> },
+}
+
+impl<'a> std::fmt::Display for Stmt<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.format_to_string())
+    }
+}
+
+impl Stmt<'_> {
+    fn format_to_string(&self) -> String {
+        match self {
+            Stmt::Expression { expression } => expression.format_to_string(),
+            Stmt::Print { expression } => {
+                format!("print {}", expression)
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum LiteralValue {
     True,
@@ -31,6 +53,7 @@ impl<'a> std::fmt::Display for Expr<'_> {
         write!(f, "{}", self.format_to_string())
     }
 }
+
 impl<'a> Expr<'_> {
     fn format_to_string(&self) -> String {
         match self {
