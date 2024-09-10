@@ -117,7 +117,15 @@ impl Interpreter {
                     Some(expr) => self.evaluate_expr(&expr)?,
                     None => RuntimeValue::Null,
                 };
-                self.environment.values.insert(name.lexeme, value);
+                self.environment.insert(name.lexeme, value);
+            }
+
+            Stmt::Block { statements } => {
+                self.environment.new_scope();
+                for stmt in statements {
+                    self.execute(stmt)?;
+                }
+                self.environment.drop_scope();
             }
         }
         Ok(())
@@ -219,7 +227,6 @@ impl Interpreter {
             Expr::Grouping { expression } => self.evaluate_expr(expression),
             Expr::Variable { name } => self
                 .environment
-                .values
                 .get(&name.lexeme)
                 .context(format!("Undefined variable '{}'.", name.lexeme))
                 .cloned(),
@@ -229,7 +236,6 @@ impl Interpreter {
 
                 let variable = self
                     .environment
-                    .values
                     .get_mut(&name.lexeme)
                     .context(format!("Undefined variable '{}'", name.lexeme))?;
                 *variable = value.clone();

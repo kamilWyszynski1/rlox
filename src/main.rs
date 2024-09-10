@@ -3,7 +3,7 @@ extern crate core;
 extern crate lazy_static;
 
 use clap::Parser;
-use std::io::Write;
+use std::io::{Read, Write};
 
 mod ast;
 mod cli;
@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let mut interpreter = Interpreter::new();
     match args.file_name {
-        Some(file_name) => unimplemented!(),
+        Some(file_name) => run_from_file(&file_name),
         None => loop {
             print!("> ");
             std::io::stdout().flush()?;
@@ -56,4 +56,16 @@ fn main() -> anyhow::Result<()> {
             }
         },
     }
+}
+
+fn run_from_file(file: &str) -> anyhow::Result<()> {
+    let mut file = std::fs::File::open(file)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+
+    let mut interpreter = Interpreter::new();
+    let mut lexer = Lexer::new(&contents);
+    let tokens = lexer.scan_tokens()?;
+    let expressions = parser::Parser::new(tokens).parse()?;
+    interpreter.interpret(expressions)
 }

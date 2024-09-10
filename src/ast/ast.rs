@@ -11,6 +11,9 @@ pub enum Stmt<'a> {
         name: Token<'a>,
         initializer: Option<Expr<'a>>,
     },
+    Block {
+        statements: Vec<Stmt<'a>>,
+    },
 }
 
 impl<'a> std::fmt::Display for Stmt<'_> {
@@ -32,6 +35,9 @@ impl Stmt<'_> {
                 }
                 Some(initializer) => format!("var {:?} = {}", name, initializer),
             },
+            Stmt::Block { statements } => {
+                format!("block with {} statement", statements.len())
+            }
         }
     }
 }

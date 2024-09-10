@@ -1,6 +1,8 @@
 use crate::ast::ast::Expr::{Assign, Literal, Variable};
 use crate::ast::ast::{Expr, LiteralValue, Stmt};
-use crate::representation::token::TokenType::{Equal, Identifier, Print, Semicolon, Var};
+use crate::representation::token::TokenType::{
+    Equal, Identifier, LeftBrace, Print, RightBrace, Semicolon, Var,
+};
 use crate::representation::token::{Token, TokenType};
 use anyhow::{bail, Context};
 
@@ -14,7 +16,10 @@ use anyhow::{bail, Context};
 // varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
 //
 // statement      → exprStmt
-//                | printStmt ;
+//                | printStmt
+//                | block ;
+//
+// block          → "{" declaration* "}" ;
 //
 // exprStmt       → expression ";" ;
 // printStmt      → "print" expression ";" ;
@@ -86,10 +91,28 @@ impl<'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> anyhow::Result<Stmt<'a>> {
-        match self.match_token_types(&[Print]) {
-            Some(_) => self.print_statement(),
+        match self.match_token_types(&[Print, LeftBrace]) {
+            Some(token) => match token.token_type {
+                Print => self.print_statement(),
+                LeftBrace => self.block(),
+                _ => bail!("unsupported token type in statement method"),
+            },
             None => self.expression_statement(),
         }
+    }
+
+    fn block(&mut self) -> anyhow::Result<Stmt<'a>> {
+        let mut declarations = Vec::new();
+        while self
+            .peek()
+            .map_or(false, |token| token.token_type != RightBrace)
+        {
+            declarations.push(self.declaration()?);
+        }
+        self.consume(RightBrace).context("Expect '}' after block")?;
+        Ok(Stmt::Block {
+            statements: declarations,
+        })
     }
 
     fn print_statement(&mut self) -> anyhow::Result<Stmt<'a>> {
