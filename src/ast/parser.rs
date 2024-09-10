@@ -1,4 +1,4 @@
-use crate::ast::ast::Expr::{Literal, Variable};
+use crate::ast::ast::Expr::{Assign, Literal, Variable};
 use crate::ast::ast::{Expr, LiteralValue, Stmt};
 use crate::representation::token::TokenType::{Equal, Identifier, Print, Semicolon, Var};
 use crate::representation::token::{Token, TokenType};
@@ -19,7 +19,9 @@ use anyhow::{bail, Context};
 // exprStmt       → expression ";" ;
 // printStmt      → "print" expression ";" ;
 //
-// expression     → equality ;
+// expression     → assignment ;
+// assignment     → IDENTIFIER "=" assignment
+//                | equality ;
 // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 // comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 // term           → factor ( ( "-" | "+" ) factor )* ;
@@ -103,7 +105,31 @@ impl<'a> Parser<'a> {
     }
 
     fn expression(&mut self) -> anyhow::Result<Expr<'a>> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> anyhow::Result<Expr<'a>> {
+        let expr = self.equality()?;
+
+        match self.match_token_types(&[Equal]) {
+            Some(_operator) => {
+                let equals = self
+                    .previous()
+                    .cloned()
+                    .context("cannot find previous token after '='")?;
+                let value = self.assignment()?;
+
+                if let Variable { name } = expr {
+                    Ok(Assign {
+                        name,
+                        value: Box::new(value),
+                    })
+                } else {
+                    bail!("Invalid assignment target {:?}", &equals);
+                }
+            }
+            None => Ok(expr),
+        }
     }
 
     fn equality(&mut self) -> anyhow::Result<Expr<'a>> {

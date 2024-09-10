@@ -63,6 +63,10 @@ pub enum Expr<'a> {
     Variable {
         name: Token<'a>,
     },
+    Assign {
+        name: Token<'a>,
+        value: Box<Expr<'a>>,
+    },
 }
 
 impl<'a> std::fmt::Display for Expr<'_> {
@@ -94,9 +98,11 @@ impl<'a> Expr<'_> {
             Expr::Grouping { expression } => {
                 format!("(group {})", expression)
             }
-
             Expr::Variable { name } => {
                 format!("var {:?}", name)
+            }
+            Expr::Assign { name, value } => {
+                format!("{:?} = {:?}", name, value)
             }
         }
     }
