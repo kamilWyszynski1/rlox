@@ -4,9 +4,9 @@ use std::collections::HashMap;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Token<'a> {
-    token_type: TokenType<'a>,
+    pub(crate) token_type: TokenType<'a>,
     pub lexeme: String,
-    line: usize,
+    pub(crate) line: usize,
 }
 
 impl<'a> Token<'a> {

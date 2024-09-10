@@ -6,9 +6,10 @@ use std::io::Write;
 mod ast;
 mod cli;
 mod interpreter;
+mod representation;
 
-use crate::interpreter::interpreter::run;
-use interpreter::interpreter::run_file;
+use crate::representation::interpreter::run;
+use representation::interpreter::run_file;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]

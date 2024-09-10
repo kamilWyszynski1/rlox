@@ -1,6 +1,6 @@
-use crate::interpreter::token;
-use crate::interpreter::token::Token;
-use crate::interpreter::token::TokenType::*;
+use crate::representation::token;
+use crate::representation::token::Token;
+use crate::representation::token::TokenType::*;
 use anyhow::bail;
 
 struct Lexer<'a> {
@@ -224,7 +224,7 @@ fn is_alphanumeric(ch: Option<char>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::interpreter::token::TokenType::{Greater, Less};
+    use crate::representation::token::TokenType::{Greater, Less};
 
     #[test]
     fn test_scan_tokens() {
