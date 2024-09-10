@@ -1,5 +1,6 @@
 use crate::representation::token::Token;
 
+#[derive(Debug, Clone)]
 pub enum Stmt<'a> {
     Expression {
         expression: Expr<'a>,
@@ -18,6 +19,10 @@ pub enum Stmt<'a> {
         condition: Expr<'a>,
         then_branch: Box<Stmt<'a>>,
         else_branch: Option<Box<Stmt<'a>>>,
+    },
+    While {
+        condition: Expr<'a>,
+        statement: Box<Stmt<'a>>,
     },
 }
 
@@ -44,6 +49,9 @@ impl Stmt<'_> {
                 format!("block with {} statement", statements.len())
             }
             Stmt::If { .. } => {
+                unimplemented!()
+            }
+            Stmt::While { .. } => {
                 unimplemented!()
             }
         }

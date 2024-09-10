@@ -3,6 +3,7 @@ use crate::interpreter::environment::Environment;
 use crate::representation::token::TokenType;
 use anyhow::{anyhow, bail, Context};
 use std::fmt::Display;
+use std::os::macos::raw::stat;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RuntimeValue {
@@ -138,6 +139,11 @@ impl Interpreter {
                     self.execute(*then_branch)?;
                 } else if let Some(else_stmt) = else_branch {
                     self.execute(*else_stmt)?;
+                }
+            }
+            Stmt::While { condition, statement } => {
+                while self.evaluate_expr(&condition)?.is_truthy() {
+                    self.execute(statement.as_ref().clone())?;
                 }
             }
         }

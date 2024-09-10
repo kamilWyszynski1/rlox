@@ -1,11 +1,13 @@
 use crate::ast::ast::Expr::{Assign, Literal, Variable};
+use crate::ast::ast::Stmt::{Block, Expression};
 use crate::ast::ast::{Expr, LiteralValue, Stmt};
 use crate::representation::token::TokenType::{
-    And, Else, Equal, Identifier, If, LeftBrace, LeftParen, Or, Print, RightBrace, RightParen,
-    Semicolon, Var,
+    And, Else, Equal, For, Identifier, If, LeftBrace, LeftParen, Or, Print, RightBrace, RightParen,
+    Semicolon, Var, While,
 };
 use crate::representation::token::{Token, TokenType};
 use anyhow::{bail, Context};
+use std::os::macos::raw::stat;
 
 // Grammar:
 //
@@ -17,11 +19,19 @@ use anyhow::{bail, Context};
 // varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
 //
 // statement      → exprStmt
+//                | forStmt
 //                | ifStmt
 //                | printStmt
+//                | whileStmt
 //                | block ;
 //
+// forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
+//                  expression? ";"
+//                  expression? ")" statement ;
+//
 // exprStmt       → expression ";" ;
+//
+// whileStmt      → "while" "(" expression ")" statement ;
 //
 // ifStmt         → "if" "(" expression ")" statement
 //                ( "else" statement )? ;
@@ -99,15 +109,93 @@ impl<'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> anyhow::Result<Stmt<'a>> {
-        match self.match_token_types(&[Print, LeftBrace, If]) {
+        match self.match_token_types(&[Print, LeftBrace, If, While, For]) {
             Some(token) => match token.token_type {
                 Print => self.print_statement(),
                 LeftBrace => self.block(),
                 If => self.if_statement(),
+                While => self.while_statement(),
+                For => self.for_loop_statement(),
                 _ => bail!("unsupported token type in statement method"),
             },
             None => self.expression_statement(),
         }
+    }
+
+    fn for_loop_statement(&mut self) -> anyhow::Result<Stmt<'a>> {
+        self.consume(LeftParen).context("Expect '(' after 'for'")?;
+
+        let initializer = match self.match_token_types(&[Semicolon, Var]) {
+            Some(token) => match token.token_type {
+                Semicolon => None,
+                Var => Some(self.var_declaration()?),
+                _ => bail!("unsupported token type as for loop initializer"),
+            },
+            None => Some(self.expression_statement()?),
+        };
+
+        let mut condition = match self.match_token_types(&[Semicolon]) {
+            None => {
+                let expr = Some(self.expression()?);
+                self.consume(Semicolon)
+                    .context("Expect ';' after loop condition")?;
+                expr
+            }
+            Some(_) => None,
+        };
+
+        let increment = match self.match_token_types(&[RightParen]) {
+            None => {
+                let expr = Some(self.expression()?);
+                self.consume(RightParen)
+                    .context("Expect ')' after for loop increment")?;
+                expr
+            }
+            Some(_) => None,
+        };
+
+        let mut body = self.statement()?;
+
+        if let Some(increment) = increment {
+            // the increment, if there is one, executes after the body in each iteration of the loop
+            body = Block {
+                statements: vec![
+                    body,
+                    Expression {
+                        expression: increment,
+                    },
+                ],
+            }
+        }
+
+        // We take the condition and the body and build the loop using a primitive while loop.
+        // If the condition is omitted, we jam in true to make an infinite loop.
+        body = Stmt::While {
+            condition: condition.unwrap_or(Literal(LiteralValue::True)),
+            statement: Box::new(body),
+        };
+
+        if let Some(initializer) = initializer {
+            // if there is an initializer, it runs once before the entire loop
+            body = Block {
+                statements: vec![initializer, body],
+            };
+        }
+
+        Ok(body)
+    }
+
+    fn while_statement(&mut self) -> anyhow::Result<Stmt<'a>> {
+        self.consume(LeftParen)
+            .context("Expect '(' after 'while'")?;
+        let condition = self.expression()?;
+        self.consume(RightParen)
+            .context("Expect ')' after 'while' condition")?;
+        let statement = self.statement()?;
+        Ok(Stmt::While {
+            condition,
+            statement: Box::new(statement),
+        })
     }
 
     fn if_statement(&mut self) -> anyhow::Result<Stmt<'a>> {
