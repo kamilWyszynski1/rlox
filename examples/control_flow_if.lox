@@ -1,0 +1,9 @@
+var a = 123.2;
+
+if (false and true)
+    print "equal";
+else
+    print "not equal";
+
+print "hi" or 2; // "hi".
+print nil or "yes"; // "yes".

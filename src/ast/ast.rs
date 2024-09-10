@@ -14,6 +14,11 @@ pub enum Stmt<'a> {
     Block {
         statements: Vec<Stmt<'a>>,
     },
+    If {
+        condition: Expr<'a>,
+        then_branch: Box<Stmt<'a>>,
+        else_branch: Option<Box<Stmt<'a>>>,
+    },
 }
 
 impl<'a> std::fmt::Display for Stmt<'_> {
@@ -37,6 +42,9 @@ impl Stmt<'_> {
             },
             Stmt::Block { statements } => {
                 format!("block with {} statement", statements.len())
+            }
+            Stmt::If { .. } => {
+                unimplemented!()
             }
         }
     }
@@ -72,6 +80,11 @@ pub enum Expr<'a> {
     Assign {
         name: Token<'a>,
         value: Box<Expr<'a>>,
+    },
+    Logical {
+        left: Box<Expr<'a>>,
+        operator: Token<'a>,
+        right: Box<Expr<'a>>,
     },
 }
 
@@ -110,6 +123,7 @@ impl<'a> Expr<'_> {
             Expr::Assign { name, value } => {
                 format!("{:?} = {:?}", name, value)
             }
+            Expr::Logical { .. } => unimplemented!(),
         }
     }
 }

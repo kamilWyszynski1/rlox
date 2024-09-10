@@ -1,7 +1,8 @@
 use crate::ast::ast::Expr::{Assign, Literal, Variable};
 use crate::ast::ast::{Expr, LiteralValue, Stmt};
 use crate::representation::token::TokenType::{
-    Equal, Identifier, LeftBrace, Print, RightBrace, Semicolon, Var,
+    And, Else, Equal, Identifier, If, LeftBrace, LeftParen, Or, Print, RightBrace, RightParen,
+    Semicolon, Var,
 };
 use crate::representation::token::{Token, TokenType};
 use anyhow::{bail, Context};
@@ -16,17 +17,24 @@ use anyhow::{bail, Context};
 // varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
 //
 // statement      → exprStmt
+//                | ifStmt
 //                | printStmt
 //                | block ;
 //
-// block          → "{" declaration* "}" ;
-//
 // exprStmt       → expression ";" ;
+//
+// ifStmt         → "if" "(" expression ")" statement
+//                ( "else" statement )? ;
+//
 // printStmt      → "print" expression ";" ;
+//
+// block          → "{" declaration* "}" ;
 //
 // expression     → assignment ;
 // assignment     → IDENTIFIER "=" assignment
-//                | equality ;
+//                | logic_or ;
+// logic_or       → logic_and ( "or" logic_and )* ;
+// logic_and      → equality ( "and" equality )* ;
 // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 // comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 // term           → factor ( ( "-" | "+" ) factor )* ;
@@ -91,14 +99,35 @@ impl<'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> anyhow::Result<Stmt<'a>> {
-        match self.match_token_types(&[Print, LeftBrace]) {
+        match self.match_token_types(&[Print, LeftBrace, If]) {
             Some(token) => match token.token_type {
                 Print => self.print_statement(),
                 LeftBrace => self.block(),
+                If => self.if_statement(),
                 _ => bail!("unsupported token type in statement method"),
             },
             None => self.expression_statement(),
         }
+    }
+
+    fn if_statement(&mut self) -> anyhow::Result<Stmt<'a>> {
+        self.consume(LeftParen).context("Expect '(' after 'if'")?;
+        let condition = self.expression()?;
+        self.consume(RightParen)
+            .context("Expect ')' after 'if' condition")?;
+        let then_branch = Box::new(self.statement()?);
+
+        let else_branch = if let Some(_) = self.match_token_types(&[Else]) {
+            Some(Box::new(self.statement()?))
+        } else {
+            None
+        };
+
+        Ok(Stmt::If {
+            condition,
+            then_branch,
+            else_branch,
+        })
     }
 
     fn block(&mut self) -> anyhow::Result<Stmt<'a>> {
@@ -117,13 +146,14 @@ impl<'a> Parser<'a> {
 
     fn print_statement(&mut self) -> anyhow::Result<Stmt<'a>> {
         let value = self.expression()?;
-        self.consume(TokenType::Semicolon)?;
+        self.consume(Semicolon)
+            .context("Expected ';' after print statement")?;
         Ok(Stmt::Print { expression: value })
     }
 
     fn expression_statement(&mut self) -> anyhow::Result<Stmt<'a>> {
         let expression = self.expression()?;
-        self.consume(TokenType::Semicolon)?;
+        self.consume(Semicolon).context("Expected ';'")?;
         Ok(Stmt::Expression { expression })
     }
 
@@ -132,7 +162,7 @@ impl<'a> Parser<'a> {
     }
 
     fn assignment(&mut self) -> anyhow::Result<Expr<'a>> {
-        let expr = self.equality()?;
+        let expr = self.logic_or()?;
 
         match self.match_token_types(&[Equal]) {
             Some(_operator) => {
@@ -153,6 +183,34 @@ impl<'a> Parser<'a> {
             }
             None => Ok(expr),
         }
+    }
+
+    fn logic_or(&mut self) -> anyhow::Result<Expr<'a>> {
+        let mut expr = self.logic_and()?;
+
+        if let Some(token) = self.match_token_types(&[Or]) {
+            let right = self.equality()?;
+            expr = Expr::Logical {
+                left: Box::new(expr),
+                operator: token,
+                right: Box::new(right),
+            }
+        }
+        Ok(expr)
+    }
+
+    fn logic_and(&mut self) -> anyhow::Result<Expr<'a>> {
+        let mut expr = self.equality()?;
+
+        if let Some(token) = self.match_token_types(&[And]) {
+            let right = self.equality()?;
+            expr = Expr::Logical {
+                left: Box::new(expr),
+                operator: token,
+                right: Box::new(right),
+            }
+        }
+        Ok(expr)
     }
 
     fn equality(&mut self) -> anyhow::Result<Expr<'a>> {

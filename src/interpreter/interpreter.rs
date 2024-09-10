@@ -127,6 +127,19 @@ impl Interpreter {
                 }
                 self.environment.drop_scope();
             }
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let evaluation = self.evaluate_expr(&condition)?;
+                // dbg!(&evaluation);
+                if evaluation.is_truthy() {
+                    self.execute(*then_branch)?;
+                } else if let Some(else_stmt) = else_branch {
+                    self.execute(*else_stmt)?;
+                }
+            }
         }
         Ok(())
     }
@@ -241,6 +254,20 @@ impl Interpreter {
                 *variable = value.clone();
 
                 Ok(value)
+            }
+            Expr::Logical {
+                left,
+                operator,
+                right,
+            } => {
+                let left_value = self.evaluate_expr(left)?;
+                match operator.token_type {
+                    TokenType::And if !left_value.is_truthy() => Ok(left_value),
+                    TokenType::And => self.evaluate_expr(right),
+                    TokenType::Or if left_value.is_truthy() => Ok(left_value),
+                    TokenType::Or => self.evaluate_expr(right),
+                    _ => bail!("invalid operator {:?}", operator),
+                }
             }
         }
     }
