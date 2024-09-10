@@ -1,8 +1,16 @@
 use crate::representation::token::Token;
 
 pub enum Stmt<'a> {
-    Expression { expression: Expr<'a> },
-    Print { expression: Expr<'a> },
+    Expression {
+        expression: Expr<'a>,
+    },
+    Print {
+        expression: Expr<'a>,
+    },
+    Var {
+        name: Token<'a>,
+        initializer: Option<Expr<'a>>,
+    },
 }
 
 impl<'a> std::fmt::Display for Stmt<'_> {
@@ -18,6 +26,12 @@ impl Stmt<'_> {
             Stmt::Print { expression } => {
                 format!("print {}", expression)
             }
+            Stmt::Var { name, initializer } => match initializer {
+                None => {
+                    format!("var {:?}", name)
+                }
+                Some(initializer) => format!("var {:?} = {}", name, initializer),
+            },
         }
     }
 }
@@ -45,6 +59,9 @@ pub enum Expr<'a> {
     Literal(LiteralValue),
     Grouping {
         expression: Box<Expr<'a>>,
+    },
+    Variable {
+        name: Token<'a>,
     },
 }
 
@@ -76,6 +93,10 @@ impl<'a> Expr<'_> {
             },
             Expr::Grouping { expression } => {
                 format!("(group {})", expression)
+            }
+
+            Expr::Variable { name } => {
+                format!("var {:?}", name)
             }
         }
     }

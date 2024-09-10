@@ -1,4 +1,5 @@
 use crate::ast::ast::{Expr, LiteralValue, Stmt};
+use crate::interpreter::environment::Environment;
 use crate::representation::token::TokenType;
 use anyhow::{anyhow, bail, Context};
 use std::fmt::Display;
@@ -84,11 +85,15 @@ impl From<&LiteralValue> for RuntimeValue {
     }
 }
 
-pub struct Interpreter {}
+pub struct Interpreter {
+    environment: Environment,
+}
 
 impl Interpreter {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            environment: Environment::new(),
+        }
     }
     pub fn interpret(&mut self, statements: Vec<Stmt>) -> anyhow::Result<()> {
         // self.evaluate_expr(expr)
@@ -105,6 +110,14 @@ impl Interpreter {
             }
             Stmt::Print { expression } => {
                 println!("{}", self.evaluate_expr(&expression)?);
+            }
+            Stmt::Var { name, initializer } => {
+                // dbg!(&name, &initializer);
+                let value = match initializer {
+                    Some(expr) => self.evaluate_expr(&expr)?,
+                    None => RuntimeValue::Null,
+                };
+                self.environment.values.insert(name.lexeme, value);
             }
         }
         Ok(())
@@ -204,6 +217,12 @@ impl Interpreter {
             Expr::Literal(value) => Ok(RuntimeValue::from(value)),
             // To evaluate the grouping expression itself, we recursively evaluate that subexpression and return it.
             Expr::Grouping { expression } => self.evaluate_expr(expression),
+            Expr::Variable { name } => self
+                .environment
+                .values
+                .get(&name.lexeme)
+                .context(format!("Undefined variable '{}'.", name.lexeme))
+                .cloned(),
         }
     }
 }
@@ -261,7 +280,7 @@ mod tests {
 
     #[test]
     fn test_literal_number() {
-        let interpreter = Interpreter {};
+        let interpreter = Interpreter::new();
         let expr = literal_number(42.0);
         let result = interpreter.evaluate_expr(&expr).unwrap();
         assert_eq!(result, RuntimeValue::Number(42.0));
@@ -269,7 +288,7 @@ mod tests {
 
     #[test]
     fn test_literal_string() {
-        let interpreter = Interpreter {};
+        let interpreter = Interpreter::new();
         let expr = literal_string("hello");
         let result = interpreter.evaluate_expr(&expr).unwrap();
         assert_eq!(result, RuntimeValue::String("hello".to_string()));
@@ -277,7 +296,7 @@ mod tests {
 
     #[test]
     fn test_literal_bool() {
-        let interpreter = Interpreter {};
+        let interpreter = Interpreter::new();
         let expr = literal_bool(true);
         let result = interpreter.evaluate_expr(&expr).unwrap();
         assert_eq!(result, RuntimeValue::Bool(true));
@@ -285,7 +304,7 @@ mod tests {
 
     #[test]
     fn test_literal_null() {
-        let interpreter = Interpreter {};
+        let interpreter = Interpreter::new();
         let expr = literal_null();
         let result = interpreter.evaluate_expr(&expr).unwrap();
         assert_eq!(result, RuntimeValue::Null);
@@ -293,7 +312,7 @@ mod tests {
 
     #[test]
     fn test_binary_addition_numbers() {
-        let interpreter = Interpreter {};
+        let interpreter = Interpreter::new();
         let expr = binary(literal_number(1.0), TokenType::Plus, literal_number(2.0));
         let result = interpreter.evaluate_expr(&expr).unwrap();
         assert_eq!(result, RuntimeValue::Number(3.0));
@@ -301,7 +320,7 @@ mod tests {
 
     #[test]
     fn test_binary_addition_strings() {
-        let interpreter = Interpreter {};
+        let interpreter = Interpreter::new();
         let expr = binary(
             literal_string("foo"),
             TokenType::Plus,
@@ -313,7 +332,7 @@ mod tests {
 
     #[test]
     fn test_unary_minus_number() {
-        let interpreter = Interpreter {};
+        let interpreter = Interpreter::new();
         let expr = unary(TokenType::Minus, literal_number(42.0));
         let result = interpreter.evaluate_expr(&expr).unwrap();
         assert_eq!(result, RuntimeValue::Number(-42.0));
@@ -321,7 +340,7 @@ mod tests {
 
     #[test]
     fn test_binary_greater() {
-        let interpreter = Interpreter {};
+        let interpreter = Interpreter::new();
         let expr = binary(literal_number(3.0), TokenType::Greater, literal_number(1.0));
         let result = interpreter.evaluate_expr(&expr).unwrap();
         assert_eq!(result, RuntimeValue::Bool(true));
@@ -329,7 +348,7 @@ mod tests {
 
     #[test]
     fn test_grouped_operations() {
-        let interpreter = Interpreter {};
+        let interpreter = Interpreter::new();
         let expr = Expr::Binary {
             left: Box::new(Expr::Literal(Number(1.))),
             operator: Token {

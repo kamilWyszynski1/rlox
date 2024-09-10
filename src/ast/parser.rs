@@ -1,12 +1,17 @@
-use crate::ast::ast::Expr::Literal;
+use crate::ast::ast::Expr::{Literal, Variable};
 use crate::ast::ast::{Expr, LiteralValue, Stmt};
-use crate::representation::token::TokenType::Print;
+use crate::representation::token::TokenType::{Equal, Identifier, Print, Semicolon, Var};
 use crate::representation::token::{Token, TokenType};
 use anyhow::{bail, Context};
 
 // Grammar:
 //
-// program        → statement* EOF ;
+// program        → declaration* EOF ;
+//
+// declaration    → varDecl
+//                | statement ;
+//
+// varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
 //
 // statement      → exprStmt
 //                | printStmt ;
@@ -21,8 +26,10 @@ use anyhow::{bail, Context};
 // factor         → unary ( ( "/" | "*" ) unary )* ;
 // unary          → ( "!" | "-" ) unary
 //                | primary ;
-// primary        → NUMBER | STRING | "true" | "false" | "nil"
-//                | "(" expression ")" ;
+// primary        → "true" | "false" | "nil"
+//                | NUMBER | STRING
+//                | "(" expression ")"
+//                | IDENTIFIER ;
 pub struct Parser<'a> {
     tokens: Vec<Token<'a>>,
 
@@ -40,9 +47,40 @@ impl<'a> Parser<'a> {
         // self.expression()
         let mut statements = Vec::new();
         while !self.is_at_end() {
-            statements.push(self.statement()?);
+            let stmt = match self.declaration() {
+                Ok(stmt) => stmt,
+                Err(err) => {
+                    self.synchronize().context("cannot synchronize")?;
+                    eprintln!("parser error: {}", err);
+                    continue;
+                }
+            };
+            statements.push(stmt);
         }
         Ok(statements)
+    }
+
+    fn declaration(&mut self) -> anyhow::Result<Stmt<'a>> {
+        match self.match_token_types(&[Var]) {
+            // TODO: synchronize?
+            Some(_) => self.var_declaration(),
+            None => self.statement(),
+        }
+    }
+
+    fn var_declaration(&mut self) -> anyhow::Result<Stmt<'a>> {
+        let name = self.consume(Identifier).context("Expect variable name")?;
+        let initializer = match self.match_token_types(&[Equal]) {
+            Some(_) => Some(self.expression()?),
+            None => {
+                // no initializer
+                None
+            }
+        };
+        self.consume(Semicolon)
+            .context("Expect ';' after variable declaration")?;
+
+        Ok(Stmt::Var { initializer, name })
     }
 
     fn statement(&mut self) -> anyhow::Result<Stmt<'a>> {
@@ -156,6 +194,9 @@ impl<'a> Parser<'a> {
                 TokenType::Nil => Literal(LiteralValue::Null),
                 TokenType::String(string) => Literal(LiteralValue::String(string.to_string())),
                 TokenType::Number(number) => Literal(LiteralValue::Number(number)),
+                TokenType::Identifier => Variable {
+                    name: token.clone(),
+                },
                 TokenType::LeftParen => {
                     self.current += 1; // consume
                     let expression = self.expression()?;
@@ -199,9 +240,9 @@ impl<'a> Parser<'a> {
         self.tokens.get(self.current - 1)
     }
 
-    fn consume(&mut self, check_type: TokenType) -> anyhow::Result<()> {
-        if let Some(_) = self.match_token_types(&[check_type]) {
-            return Ok(());
+    fn consume(&mut self, check_type: TokenType) -> anyhow::Result<Token<'a>> {
+        if let Some(token) = self.match_token_types(&[check_type]) {
+            return Ok(token);
         }
 
         let token = self.peek();
