@@ -63,6 +63,7 @@ pub enum TokenType<'a> {
     True,
     Var,
     While,
+    Break,
 }
 
 lazy_static! {
@@ -84,6 +85,7 @@ lazy_static! {
         m.insert("true", TokenType::True);
         m.insert("var", TokenType::Var);
         m.insert("while", TokenType::While);
+        m.insert("break", TokenType::Break);
         m
     };
 }

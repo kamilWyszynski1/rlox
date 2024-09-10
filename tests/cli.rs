@@ -63,3 +63,15 @@ fn test_for_loop() -> anyhow::Result<()> {
         .stdout(predicate::str::is_match(result)?);
     Ok(())
 }
+
+#[test]
+fn test_loops_break() -> anyhow::Result<()> {
+    let mut cmd = Command::cargo_bin("rlox")?;
+
+    cmd.arg("-f").arg("examples/loops_break.lox");
+    let result = r#"9\n8\n7\n6\n5\n4\n3\n2\n1\n0\n9\n8\n7\n6\n5\n4\n3\n2\n1\n0\n9\n8\n7\n6\n5\n4"#;
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::is_match(result)?);
+    Ok(())
+}

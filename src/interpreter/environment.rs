@@ -22,7 +22,7 @@ impl Environment {
     }
 
     pub fn drop_scope(&mut self) {
-        if let Some(mut nested) = self.nested.take() {
+        if let Some(nested) = self.nested.take() {
             if nested.nested.is_some() {
                 self.nested = Some(nested);
                 self.nested.as_mut().unwrap().drop_scope();

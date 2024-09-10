@@ -24,6 +24,7 @@ pub enum Stmt<'a> {
         condition: Expr<'a>,
         statement: Box<Stmt<'a>>,
     },
+    Break,
 }
 
 impl<'a> std::fmt::Display for Stmt<'_> {
@@ -54,6 +55,7 @@ impl Stmt<'_> {
             Stmt::While { .. } => {
                 unimplemented!()
             }
+            Stmt::Break => unimplemented!(),
         }
     }
 }

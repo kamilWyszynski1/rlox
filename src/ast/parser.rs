@@ -2,12 +2,11 @@ use crate::ast::ast::Expr::{Assign, Literal, Variable};
 use crate::ast::ast::Stmt::{Block, Expression};
 use crate::ast::ast::{Expr, LiteralValue, Stmt};
 use crate::representation::token::TokenType::{
-    And, Else, Equal, For, Identifier, If, LeftBrace, LeftParen, Or, Print, RightBrace, RightParen,
-    Semicolon, Var, While,
+    And, Break, Else, Equal, For, Identifier, If, LeftBrace, LeftParen, Or, Print, RightBrace,
+    RightParen, Semicolon, Var, While,
 };
 use crate::representation::token::{Token, TokenType};
 use anyhow::{bail, Context};
-use std::os::macos::raw::stat;
 
 // Grammar:
 //
@@ -54,17 +53,23 @@ use std::os::macos::raw::stat;
 // primary        → "true" | "false" | "nil"
 //                | NUMBER | STRING
 //                | "(" expression ")"
-//                | IDENTIFIER ;
+//                | IDENTIFIER | BREAK ;
 pub struct Parser<'a> {
     tokens: Vec<Token<'a>>,
 
     /// Points to the next token waiting to be parsed.
     current: usize,
+
+    is_loop_open: bool,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(tokens: Vec<Token<'a>>) -> Self {
-        Self { tokens, current: 0 }
+        Self {
+            tokens,
+            current: 0,
+            is_loop_open: false,
+        }
     }
 
     /// Starts parsing process.
@@ -109,16 +114,27 @@ impl<'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> anyhow::Result<Stmt<'a>> {
-        match self.match_token_types(&[Print, LeftBrace, If, While, For]) {
+        match self.match_token_types(&[Print, LeftBrace, If, While, For, Break]) {
             Some(token) => match token.token_type {
                 Print => self.print_statement(),
                 LeftBrace => self.block(),
                 If => self.if_statement(),
                 While => self.while_statement(),
                 For => self.for_loop_statement(),
+                Break => self.break_statement(),
                 _ => bail!("unsupported token type in statement method"),
             },
             None => self.expression_statement(),
+        }
+    }
+
+    fn break_statement(&mut self) -> anyhow::Result<Stmt<'a>> {
+        self.consume(Semicolon)
+            .context("Expect ';' after break statement")?;
+        if self.is_loop_open {
+            Ok(Stmt::Break)
+        } else {
+            bail!("break keyword cannot be used outside of loop")
         }
     }
 
@@ -134,7 +150,7 @@ impl<'a> Parser<'a> {
             None => Some(self.expression_statement()?),
         };
 
-        let mut condition = match self.match_token_types(&[Semicolon]) {
+        let condition = match self.match_token_types(&[Semicolon]) {
             None => {
                 let expr = Some(self.expression()?);
                 self.consume(Semicolon)
@@ -154,7 +170,9 @@ impl<'a> Parser<'a> {
             Some(_) => None,
         };
 
+        self.is_loop_open = true; // allow 'break' keyword to be parsed
         let mut body = self.statement()?;
+        self.is_loop_open = true; // allow 'break' keyword to be parsed
 
         if let Some(increment) = increment {
             // the increment, if there is one, executes after the body in each iteration of the loop
@@ -191,7 +209,11 @@ impl<'a> Parser<'a> {
         let condition = self.expression()?;
         self.consume(RightParen)
             .context("Expect ')' after 'while' condition")?;
+
+        self.is_loop_open = true; // allow 'break' keyword to be parsed
         let statement = self.statement()?;
+        self.is_loop_open = false;
+
         Ok(Stmt::While {
             condition,
             statement: Box::new(statement),

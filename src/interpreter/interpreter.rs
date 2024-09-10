@@ -3,7 +3,6 @@ use crate::interpreter::environment::Environment;
 use crate::representation::token::TokenType;
 use anyhow::{anyhow, bail, Context};
 use std::fmt::Display;
-use std::os::macos::raw::stat;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RuntimeValue {
@@ -86,6 +85,13 @@ impl From<&LiteralValue> for RuntimeValue {
     }
 }
 
+/// Adds more context to the statement execution.
+///
+#[derive(Debug, Clone)]
+struct ExecutionInfo {
+    loop_break: bool,
+}
+
 pub struct Interpreter {
     environment: Environment,
 }
@@ -104,29 +110,36 @@ impl Interpreter {
         Ok(())
     }
 
-    fn execute(&mut self, statement: Stmt) -> anyhow::Result<()> {
+    fn execute(&mut self, statement: Stmt) -> anyhow::Result<Option<ExecutionInfo>> {
         match statement {
             Stmt::Expression { expression } => {
                 self.evaluate_expr(&expression)?;
+                Ok(None)
             }
             Stmt::Print { expression } => {
                 println!("{}", self.evaluate_expr(&expression)?);
+                Ok(None)
             }
             Stmt::Var { name, initializer } => {
-                // dbg!(&name, &initializer);
                 let value = match initializer {
                     Some(expr) => self.evaluate_expr(&expr)?,
                     None => RuntimeValue::Null,
                 };
                 self.environment.insert(name.lexeme, value);
+                Ok(None)
             }
 
             Stmt::Block { statements } => {
                 self.environment.new_scope();
                 for stmt in statements {
-                    self.execute(stmt)?;
+                    if let Some(exec_info) = self.execute(stmt)? {
+                        if exec_info.loop_break {
+                            return Ok(Some(exec_info));
+                        }
+                    }
                 }
                 self.environment.drop_scope();
+                Ok(None)
             }
             Stmt::If {
                 condition,
@@ -134,20 +147,29 @@ impl Interpreter {
                 else_branch,
             } => {
                 let evaluation = self.evaluate_expr(&condition)?;
-                // dbg!(&evaluation);
                 if evaluation.is_truthy() {
-                    self.execute(*then_branch)?;
+                    self.execute(*then_branch)
                 } else if let Some(else_stmt) = else_branch {
-                    self.execute(*else_stmt)?;
+                    self.execute(*else_stmt)
+                } else {
+                    Ok(None)
                 }
             }
-            Stmt::While { condition, statement } => {
+            Stmt::While {
+                condition,
+                statement,
+            } => {
                 while self.evaluate_expr(&condition)?.is_truthy() {
-                    self.execute(statement.as_ref().clone())?;
+                    if let Some(exec_info) = self.execute(statement.as_ref().clone())? {
+                        if exec_info.loop_break {
+                            break;
+                        }
+                    }
                 }
+                Ok(None)
             }
+            Stmt::Break => Ok(Some(ExecutionInfo { loop_break: true })),
         }
-        Ok(())
     }
 
     fn evaluate_expr(&mut self, expr: &Expr) -> anyhow::Result<RuntimeValue> {
