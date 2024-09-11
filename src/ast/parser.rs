@@ -2,8 +2,8 @@ use crate::ast::ast::Expr::{Assign, Literal, Variable};
 use crate::ast::ast::Stmt::{Block, Expression};
 use crate::ast::ast::{Expr, LiteralValue, Stmt};
 use crate::representation::token::TokenType::{
-    And, Break, Else, Equal, For, Identifier, If, LeftBrace, LeftParen, Or, Print, RightBrace,
-    RightParen, Semicolon, Var, While,
+    And, Break, Comma, Else, Equal, For, Fun, Identifier, If, LeftBrace, LeftParen, Or, Print,
+    RightBrace, RightParen, Semicolon, Var, While,
 };
 use crate::representation::token::{Token, TokenType};
 use anyhow::{bail, Context};
@@ -12,8 +12,13 @@ use anyhow::{bail, Context};
 //
 // program        → declaration* EOF ;
 //
-// declaration    → varDecl
+// declaration    → funDecl
+//                | varDecl
 //                | statement ;
+//
+// funDecl        → "fun" function ;
+// function       → IDENTIFIER "(" parameters? ")" block ;
+// parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
 //
 // varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
 //
@@ -48,8 +53,9 @@ use anyhow::{bail, Context};
 // comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 // term           → factor ( ( "-" | "+" ) factor )* ;
 // factor         → unary ( ( "/" | "*" ) unary )* ;
-// unary          → ( "!" | "-" ) unary
-//                | primary ;
+// unary          → ( "!" | "-" ) unary | call ;
+// call           → primary ( "(" arguments? ")" )* ;
+// arguments      → expression ( "," expression )* ;
 // primary        → "true" | "false" | "nil"
 //                | NUMBER | STRING
 //                | "(" expression ")"
@@ -91,10 +97,42 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> anyhow::Result<Stmt<'a>> {
-        match self.match_token_types(&[Var]) {
+        match self.match_token_types(&[Var, Fun]) {
             // TODO: synchronize?
-            Some(_) => self.var_declaration(),
+            Some(token) => match token.token_type {
+                Var => self.var_declaration(),
+                Fun => self.fun(),
+                _ => bail!("unsupported token type in declaration method"),
+            },
             None => self.statement(),
+        }
+    }
+
+    fn fun(&mut self) -> anyhow::Result<Stmt<'a>> {
+        let name = self.consume(Identifier).context("Expect function name")?;
+        self.consume(LeftParen)
+            .context("Expect '(' after function name")?;
+
+        let mut params = Vec::new();
+        loop {
+            match self.match_token_types(&[Identifier]) {
+                None => break,
+                Some(token) => {
+                    params.push(token);
+                    self.consume(Comma).context("Expect ',' after parameters")?;
+                }
+            }
+        }
+        self.consume(RightParen)
+            .context("Expect ')' after parameters")?;
+        if let Stmt::Block { statements } = self.block()? {
+            Ok(Stmt::Function {
+                name,
+                params,
+                body: statements,
+            })
+        } else {
+            bail!("expected block")
         }
     }
 
@@ -399,7 +437,44 @@ impl<'a> Parser<'a> {
                 right: Box::new(right),
             });
         }
-        self.primary()
+        self.call()
+    }
+
+    fn call(&mut self) -> anyhow::Result<Expr<'a>> {
+        let mut expr = self.primary()?;
+
+        loop {
+            match self.match_token_types(&[TokenType::LeftParen]) {
+                None => break,
+                Some(_) => expr = self.finish_call(expr)?,
+            }
+        }
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expr<'a>) -> anyhow::Result<Expr<'a>> {
+        let mut arguments = vec![];
+        let paren = match self.match_token_types(&[RightParen]) {
+            None => {
+                arguments.push(self.expression()?); // take first argument before first comma
+                while let Some(_) = self.match_token_types(&[TokenType::Comma]) {
+                    // take rest of arguments
+                    if arguments.len() >= 255 {
+                        eprintln!("Can't have more than 255 arguments");
+                    }
+                    arguments.push(self.expression()?);
+                }
+                self.consume(RightParen)
+                    .context("Expect ')' after arguments")?
+            }
+            Some(token) => token,
+        };
+
+        Ok(Expr::Call {
+            arguments,
+            callee: Box::new(callee),
+            paren,
+        })
     }
 
     fn primary(&mut self) -> anyhow::Result<Expr<'a>> {

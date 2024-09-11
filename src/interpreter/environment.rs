@@ -1,6 +1,7 @@
 use crate::interpreter::interpreter::RuntimeValue;
 use std::collections::HashMap;
 
+#[derive(Debug, Clone)]
 pub struct Environment {
     values: HashMap<String, RuntimeValue>,
     nested: Option<Box<Environment>>,
@@ -50,12 +51,12 @@ impl Environment {
         }
     }
 
-    pub fn insert(&mut self, key: String, value: RuntimeValue) {
+    pub fn define(&mut self, key: String, value: RuntimeValue) {
         match &mut self.nested {
             None => {
                 self.values.insert(key, value);
             }
-            Some(nested) => nested.insert(key.clone(), value.clone()),
+            Some(nested) => nested.define(key.clone(), value.clone()),
         }
     }
 }

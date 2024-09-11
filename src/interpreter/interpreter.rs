@@ -1,23 +1,50 @@
 use crate::ast::ast::{Expr, LiteralValue, Stmt};
 use crate::interpreter::environment::Environment;
-use crate::representation::token::TokenType;
+use crate::interpreter::native::ClockCaller;
+use crate::representation::token::{Token, TokenType};
 use anyhow::{anyhow, bail, Context};
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
+use std::rc::Rc;
 
-#[derive(Debug, Clone, PartialEq)]
+pub trait LoxCallable: Debug {
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        arguments: Vec<RuntimeValue>,
+    ) -> anyhow::Result<RuntimeValue>;
+    fn arity(&self) -> usize;
+}
+
+#[derive(Debug, Clone)]
 pub enum RuntimeValue {
     Bool(bool),
     Null,
     Number(f64),
     String(String),
+    Callable(Rc<dyn LoxCallable>),
 }
 
 impl RuntimeValue {
     /// Lox follows Ruby’s simple rule: false and nil are falsey, and everything else is truthy.
     fn is_truthy(&self) -> bool {
         match self {
-            RuntimeValue::Bool(true) | RuntimeValue::Number(_) | RuntimeValue::String(_) => true,
+            RuntimeValue::Bool(true)
+            | RuntimeValue::Number(_)
+            | RuntimeValue::String(_)
+            | RuntimeValue::Callable(_) => true,
             RuntimeValue::Bool(false) | RuntimeValue::Null => false,
+        }
+    }
+}
+
+impl PartialEq for RuntimeValue {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (RuntimeValue::Bool(lhs), RuntimeValue::Bool(rhs)) => lhs == rhs,
+            (RuntimeValue::Null, RuntimeValue::Null) => true,
+            (RuntimeValue::Number(lhs), RuntimeValue::Number(rhs)) => lhs == rhs,
+            (RuntimeValue::String(lhs), RuntimeValue::String(rhs)) => lhs == rhs,
+            _ => false,
         }
     }
 }
@@ -29,6 +56,7 @@ impl Display for RuntimeValue {
             RuntimeValue::Null => "null".to_string(),
             RuntimeValue::Number(n) => n.to_string(),
             RuntimeValue::String(s) => s.clone(),
+            RuntimeValue::Callable(_) => "callable".to_string(),
         };
         write!(f, "{}", str)
     }
@@ -57,6 +85,7 @@ impl TryInto<f64> for RuntimeValue {
             RuntimeValue::String(string) => string
                 .parse()
                 .map_err(|_| anyhow!("Cannot convert runtime value (String, {string}) to number")),
+            RuntimeValue::Callable(_) => bail!("Cannot convert runtime value (Callable) to number"),
         }
     }
 }
@@ -85,6 +114,44 @@ impl From<&LiteralValue> for RuntimeValue {
     }
 }
 
+#[derive(Debug, Clone)]
+struct CallableObject<'a> {
+    parameters: Vec<Token<'a>>,
+    body: Vec<Stmt<'a>>,
+}
+
+impl<'a> CallableObject<'a> {
+    fn new(parameters: Vec<Token<'a>>, body: Vec<Stmt<'a>>) -> Self {
+        Self { parameters, body }
+    }
+}
+
+impl<'a> LoxCallable for CallableObject<'a> {
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        arguments: Vec<RuntimeValue>,
+    ) -> anyhow::Result<RuntimeValue> {
+        interpreter.environment.new_scope();
+
+        for (param, arg) in self.parameters.iter().zip(arguments.iter()) {
+            interpreter
+                .environment
+                .define(param.lexeme.to_string(), arg.clone());
+        }
+
+        interpreter.interpret(self.body.clone())?;
+
+        interpreter.environment.drop_scope();
+
+        Ok(RuntimeValue::Null)
+    }
+
+    fn arity(&self) -> usize {
+        self.parameters.len()
+    }
+}
+
 /// Adds more context to the statement execution.
 ///
 #[derive(Debug, Clone)]
@@ -93,13 +160,20 @@ struct ExecutionInfo {
 }
 
 pub struct Interpreter {
+    globals: Environment,
     environment: Environment,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
+        let mut globals = Environment::new();
+        globals.define(
+            "clock".to_string(),
+            RuntimeValue::Callable(Rc::new(ClockCaller::new())),
+        );
         Self {
-            environment: Environment::new(),
+            environment: globals.clone(),
+            globals,
         }
     }
     pub fn interpret(&mut self, statements: Vec<Stmt>) -> anyhow::Result<()> {
@@ -110,7 +184,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn execute(&mut self, statement: Stmt) -> anyhow::Result<Option<ExecutionInfo>> {
+    fn execute<'a>(&mut self, statement: Stmt<'a>) -> anyhow::Result<Option<ExecutionInfo>> {
         match statement {
             Stmt::Expression { expression } => {
                 self.evaluate_expr(&expression)?;
@@ -125,7 +199,7 @@ impl Interpreter {
                     Some(expr) => self.evaluate_expr(&expr)?,
                     None => RuntimeValue::Null,
                 };
-                self.environment.insert(name.lexeme, value);
+                self.environment.define(name.lexeme, value);
                 Ok(None)
             }
 
@@ -169,6 +243,15 @@ impl Interpreter {
                 Ok(None)
             }
             Stmt::Break => Ok(Some(ExecutionInfo { loop_break: true })),
+            Stmt::Function { name, params, body } => {
+                let callable = Rc::new(CallableObject::new(
+                    params.iter().map(|x| x.clone()).collect(),
+                    vec![],
+                ));
+                self.environment
+                    .define(name.lexeme.clone(), RuntimeValue::Callable(callable));
+                Ok(None)
+            }
         }
     }
 
@@ -295,6 +378,27 @@ impl Interpreter {
                     TokenType::Or if left_value.is_truthy() => Ok(left_value),
                     TokenType::Or => self.evaluate_expr(right),
                     _ => bail!("invalid operator {:?}", operator),
+                }
+            }
+            Expr::Call {
+                callee,
+                paren,
+                arguments,
+            } => {
+                let callee = self.evaluate_expr(callee)?;
+
+                let lox_arguments = arguments
+                    .iter()
+                    .map(|arg| self.evaluate_expr(arg))
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                if let RuntimeValue::Callable(c) = callee {
+                    if c.arity() != arguments.len() {
+                        bail!("function must be called with {} arguments", c.arity())
+                    }
+                    c.call(self, lox_arguments)
+                } else {
+                    bail!("only callable can be invoked")
                 }
             }
         }

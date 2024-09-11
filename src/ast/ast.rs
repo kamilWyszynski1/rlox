@@ -5,6 +5,11 @@ pub enum Stmt<'a> {
     Expression {
         expression: Expr<'a>,
     },
+    Function {
+        name: Token<'a>,
+        params: Vec<Token<'a>>,
+        body: Vec<Stmt<'a>>,
+    },
     Print {
         expression: Expr<'a>,
     },
@@ -25,39 +30,6 @@ pub enum Stmt<'a> {
         statement: Box<Stmt<'a>>,
     },
     Break,
-}
-
-impl<'a> std::fmt::Display for Stmt<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.format_to_string())
-    }
-}
-
-impl Stmt<'_> {
-    fn format_to_string(&self) -> String {
-        match self {
-            Stmt::Expression { expression } => expression.format_to_string(),
-            Stmt::Print { expression } => {
-                format!("print {}", expression)
-            }
-            Stmt::Var { name, initializer } => match initializer {
-                None => {
-                    format!("var {:?}", name)
-                }
-                Some(initializer) => format!("var {:?} = {}", name, initializer),
-            },
-            Stmt::Block { statements } => {
-                format!("block with {} statement", statements.len())
-            }
-            Stmt::If { .. } => {
-                unimplemented!()
-            }
-            Stmt::While { .. } => {
-                unimplemented!()
-            }
-            Stmt::Break => unimplemented!(),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -95,6 +67,11 @@ pub enum Expr<'a> {
         left: Box<Expr<'a>>,
         operator: Token<'a>,
         right: Box<Expr<'a>>,
+    },
+    Call {
+        callee: Box<Expr<'a>>,
+        paren: Token<'a>,
+        arguments: Vec<Expr<'a>>,
     },
 }
 
@@ -134,6 +111,7 @@ impl<'a> Expr<'_> {
                 format!("{:?} = {:?}", name, value)
             }
             Expr::Logical { .. } => unimplemented!(),
+            Expr::Call { .. } => unimplemented!(),
         }
     }
 }
