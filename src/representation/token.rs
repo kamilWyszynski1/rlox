@@ -3,14 +3,14 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Token<'a> {
-    pub(crate) token_type: TokenType<'a>,
+pub struct Token {
+    pub(crate) token_type: TokenType,
     pub lexeme: String,
     pub(crate) line: usize,
 }
 
-impl<'a> Token<'a> {
-    pub fn new(token_type: TokenType<'a>, lexeme: String, line: usize) -> Self {
+impl Token {
+    pub fn new(token_type: TokenType, lexeme: String, line: usize) -> Self {
         Self {
             token_type,
             lexeme,
@@ -19,8 +19,8 @@ impl<'a> Token<'a> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum TokenType<'a> {
+#[derive(Debug, Clone, PartialEq)]
+pub enum TokenType {
     // Single-character tokens.
     LeftParen,
     RightParen,
@@ -44,7 +44,7 @@ pub enum TokenType<'a> {
     LessEqual,
 
     Identifier,
-    String(&'a str),
+    String(String),
     Number(f64),
 
     And,
@@ -67,7 +67,7 @@ pub enum TokenType<'a> {
 }
 
 lazy_static! {
-    pub static ref KEYWORDS: HashMap<&'static str, TokenType<'static>> = {
+    pub static ref KEYWORDS: HashMap<&'static str, TokenType> = {
         let mut m = HashMap::new();
         m.insert("and", TokenType::And);
         m.insert("class", TokenType::Class);

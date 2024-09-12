@@ -115,24 +115,31 @@ impl From<&LiteralValue> for RuntimeValue {
 }
 
 #[derive(Debug, Clone)]
-struct CallableObject<'a> {
-    parameters: Vec<Token<'a>>,
-    body: Vec<Stmt<'a>>,
+struct CallableObject {
+    closure: Environment,
+    parameters: Vec<Token>,
+    body: Vec<Stmt>,
 }
 
-impl<'a> CallableObject<'a> {
-    fn new(parameters: Vec<Token<'a>>, body: Vec<Stmt<'a>>) -> Self {
-        Self { parameters, body }
+impl CallableObject {
+    fn new(parameters: Vec<Token>, body: Vec<Stmt>, closure: Environment) -> Self {
+        Self {
+            parameters,
+            body,
+            closure,
+        }
     }
 }
 
-impl<'a> LoxCallable for CallableObject<'a> {
+impl LoxCallable for CallableObject {
     fn call(
         &self,
         interpreter: &mut Interpreter,
         arguments: Vec<RuntimeValue>,
     ) -> anyhow::Result<RuntimeValue> {
-        interpreter.environment.new_scope();
+        interpreter
+            .environment
+            .new_scope_with_environment(self.closure.clone());
 
         for (param, arg) in self.parameters.iter().zip(arguments.iter()) {
             interpreter
@@ -140,11 +147,14 @@ impl<'a> LoxCallable for CallableObject<'a> {
                 .define(param.lexeme.to_string(), arg.clone());
         }
 
-        interpreter.interpret(self.body.clone())?;
-
+        let value = interpreter
+            .interpret(self.body.clone())
+            .context("error during function call")?
+            .and_then(|exec_info| exec_info.function_return)
+            .unwrap_or(RuntimeValue::Null);
         interpreter.environment.drop_scope();
 
-        Ok(RuntimeValue::Null)
+        Ok(value)
     }
 
     fn arity(&self) -> usize {
@@ -155,8 +165,9 @@ impl<'a> LoxCallable for CallableObject<'a> {
 /// Adds more context to the statement execution.
 ///
 #[derive(Debug, Clone)]
-struct ExecutionInfo {
+pub struct ExecutionInfo {
     loop_break: bool,
+    function_return: Option<RuntimeValue>,
 }
 
 pub struct Interpreter {
@@ -176,15 +187,16 @@ impl Interpreter {
             globals,
         }
     }
-    pub fn interpret(&mut self, statements: Vec<Stmt>) -> anyhow::Result<()> {
-        // self.evaluate_expr(expr)
+    pub fn interpret(&mut self, statements: Vec<Stmt>) -> anyhow::Result<Option<ExecutionInfo>> {
         for statement in statements {
-            self.execute(statement)?;
+            if let Some(exec_info) = self.execute(statement)? {
+                return Ok(Some(exec_info));
+            }
         }
-        Ok(())
+        Ok(None)
     }
 
-    fn execute<'a>(&mut self, statement: Stmt<'a>) -> anyhow::Result<Option<ExecutionInfo>> {
+    fn execute(&mut self, statement: Stmt) -> anyhow::Result<Option<ExecutionInfo>> {
         match statement {
             Stmt::Expression { expression } => {
                 self.evaluate_expr(&expression)?;
@@ -207,7 +219,7 @@ impl Interpreter {
                 self.environment.new_scope();
                 for stmt in statements {
                     if let Some(exec_info) = self.execute(stmt)? {
-                        if exec_info.loop_break {
+                        if exec_info.loop_break || exec_info.function_return.is_some() {
                             return Ok(Some(exec_info));
                         }
                     }
@@ -238,19 +250,37 @@ impl Interpreter {
                         if exec_info.loop_break {
                             break;
                         }
+                        if exec_info.function_return.is_some() {
+                            return Ok(Some(exec_info));
+                        }
                     }
                 }
                 Ok(None)
             }
-            Stmt::Break => Ok(Some(ExecutionInfo { loop_break: true })),
+            Stmt::Break => Ok(Some(ExecutionInfo {
+                loop_break: true,
+                function_return: None,
+            })),
             Stmt::Function { name, params, body } => {
                 let callable = Rc::new(CallableObject::new(
-                    params.iter().map(|x| x.clone()).collect(),
-                    vec![],
+                    params,
+                    body,
+                    self.environment.last_scope(),
                 ));
                 self.environment
                     .define(name.lexeme.clone(), RuntimeValue::Callable(callable));
                 Ok(None)
+            }
+            Stmt::Return { expr, keyword } => {
+                let function_return = if let Some(expr) = expr {
+                    Some(self.evaluate_expr(&expr)?)
+                } else {
+                    None
+                };
+                Ok(Some(ExecutionInfo {
+                    loop_break: false,
+                    function_return,
+                }))
             }
         }
     }
@@ -323,7 +353,7 @@ impl Interpreter {
             Expr::Unary { operator, right } => {
                 let sub_expr = self.evaluate_expr(right)?;
 
-                match (operator.token_type, &sub_expr) {
+                match (&operator.token_type, &sub_expr) {
                     (TokenType::Minus, RuntimeValue::Number(number)) => {
                         Ok(RuntimeValue::Number(-number))
                     }
@@ -355,7 +385,6 @@ impl Interpreter {
                 .context(format!("Undefined variable '{}'.", name.lexeme))
                 .cloned(),
             Expr::Assign { name, value } => {
-                // dbg!(&name, &initializer);
                 let value = self.evaluate_expr(value)?;
 
                 let variable = self
@@ -411,17 +440,19 @@ mod tests {
 
     use crate::ast::ast::LiteralValue::Number;
     use crate::ast::ast::*;
+    use crate::ast::parser;
+    use crate::representation::lexer::Lexer;
     use crate::representation::token::Token;
 
-    fn literal_number<'a>(value: f64) -> Expr<'a> {
+    fn literal_number(value: f64) -> Expr {
         Expr::Literal(LiteralValue::Number(value))
     }
 
-    fn literal_string<'a>(value: &str) -> Expr<'a> {
+    fn literal_string(value: &str) -> Expr {
         Expr::Literal(LiteralValue::String(value.to_string()))
     }
 
-    fn literal_bool<'a>(value: bool) -> Expr<'a> {
+    fn literal_bool(value: bool) -> Expr {
         if value {
             Expr::Literal(LiteralValue::True)
         } else {
@@ -429,11 +460,11 @@ mod tests {
         }
     }
 
-    fn literal_null<'a>() -> Expr<'a> {
+    fn literal_null() -> Expr {
         Expr::Literal(LiteralValue::Null)
     }
 
-    fn binary<'a>(left: Expr<'a>, operator: TokenType<'a>, right: Expr<'a>) -> Expr<'a> {
+    fn binary(left: Expr, operator: TokenType, right: Expr) -> Expr {
         Expr::Binary {
             left: Box::new(left),
             operator: Token {
@@ -445,7 +476,7 @@ mod tests {
         }
     }
 
-    fn unary<'a>(operator: TokenType<'a>, right: Expr<'a>) -> Expr<'a> {
+    fn unary(operator: TokenType, right: Expr) -> Expr {
         Expr::Unary {
             operator: Token {
                 token_type: operator,
@@ -551,5 +582,25 @@ mod tests {
             interpreter.evaluate_expr(&expr).unwrap(),
             RuntimeValue::Number(7.0)
         );
+    }
+
+    #[test]
+    fn test_function_return() -> anyhow::Result<()> {
+        let contents = r#"fun counter(n) {
+  while (n < 100) {
+    if (n == 3) return n; // <--
+    print n;
+    n = n + 1;
+  }
+}
+
+counter(1);
+"#;
+        let mut interpreter = Interpreter::new();
+        let mut lexer = Lexer::new(&contents);
+        let tokens = lexer.scan_tokens()?;
+        let expressions = parser::Parser::new(tokens).parse()?;
+        interpreter.interpret(expressions)?;
+        Ok(())
     }
 }

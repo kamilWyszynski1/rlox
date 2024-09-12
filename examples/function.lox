@@ -1,0 +1,29 @@
+fun counter(n, y) {
+  while (n < 100) {
+    if (n == 3) return n; // <--
+    print n;
+    n = n + 1;
+  }
+}
+
+print counter(1, 2);
+ 
+fun counter(n) {
+  fun nested_addition(x, y) {
+    return x + y;
+  }
+
+  while (n < 100) {
+    if (n == 3) return n; // <--
+    print n;
+    n = nested_addition(n, 1);
+  }
+}
+
+print counter(1);
+
+fun caller(n) {
+    print counter(n);
+}
+
+caller(2);

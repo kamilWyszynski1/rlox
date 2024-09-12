@@ -67,5 +67,6 @@ fn run_from_file(file: &str) -> anyhow::Result<()> {
     let mut lexer = Lexer::new(&contents);
     let tokens = lexer.scan_tokens()?;
     let expressions = parser::Parser::new(tokens).parse()?;
-    interpreter.interpret(expressions)
+    interpreter.interpret(expressions)?;
+    Ok(())
 }

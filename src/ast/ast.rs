@@ -1,35 +1,39 @@
 use crate::representation::token::Token;
 
 #[derive(Debug, Clone)]
-pub enum Stmt<'a> {
+pub enum Stmt {
     Expression {
-        expression: Expr<'a>,
+        expression: Expr,
     },
     Function {
-        name: Token<'a>,
-        params: Vec<Token<'a>>,
-        body: Vec<Stmt<'a>>,
+        name: Token,
+        params: Vec<Token>,
+        body: Vec<Stmt>,
     },
     Print {
-        expression: Expr<'a>,
+        expression: Expr,
     },
     Var {
-        name: Token<'a>,
-        initializer: Option<Expr<'a>>,
+        name: Token,
+        initializer: Option<Expr>,
     },
     Block {
-        statements: Vec<Stmt<'a>>,
+        statements: Vec<Stmt>,
     },
     If {
-        condition: Expr<'a>,
-        then_branch: Box<Stmt<'a>>,
-        else_branch: Option<Box<Stmt<'a>>>,
+        condition: Expr,
+        then_branch: Box<Stmt>,
+        else_branch: Option<Box<Stmt>>,
     },
     While {
-        condition: Expr<'a>,
-        statement: Box<Stmt<'a>>,
+        condition: Expr,
+        statement: Box<Stmt>,
     },
     Break,
+    Return {
+        keyword: Token,
+        expr: Option<Expr>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -42,46 +46,46 @@ pub enum LiteralValue {
 }
 
 #[derive(Debug, Clone)]
-pub enum Expr<'a> {
+pub enum Expr {
     Binary {
-        left: Box<Expr<'a>>,
-        operator: Token<'a>,
-        right: Box<Expr<'a>>,
+        left: Box<Expr>,
+        operator: Token,
+        right: Box<Expr>,
     },
     Unary {
-        operator: Token<'a>,
-        right: Box<Expr<'a>>,
+        operator: Token,
+        right: Box<Expr>,
     },
     Literal(LiteralValue),
     Grouping {
-        expression: Box<Expr<'a>>,
+        expression: Box<Expr>,
     },
     Variable {
-        name: Token<'a>,
+        name: Token,
     },
     Assign {
-        name: Token<'a>,
-        value: Box<Expr<'a>>,
+        name: Token,
+        value: Box<Expr>,
     },
     Logical {
-        left: Box<Expr<'a>>,
-        operator: Token<'a>,
-        right: Box<Expr<'a>>,
+        left: Box<Expr>,
+        operator: Token,
+        right: Box<Expr>,
     },
     Call {
-        callee: Box<Expr<'a>>,
-        paren: Token<'a>,
-        arguments: Vec<Expr<'a>>,
+        callee: Box<Expr>,
+        paren: Token,
+        arguments: Vec<Expr>,
     },
 }
 
-impl<'a> std::fmt::Display for Expr<'_> {
+impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.format_to_string())
     }
 }
 
-impl<'a> Expr<'_> {
+impl Expr {
     fn format_to_string(&self) -> String {
         match self {
             Expr::Binary {

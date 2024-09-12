@@ -114,7 +114,11 @@ impl<'a> Lexer<'a> {
                             self.index += 1; // closing " character
 
                             let string = &self.source[start..self.index - 1];
-                            tokens.push(Token::new(String(string), string.to_string(), self.line));
+                            tokens.push(Token::new(
+                                String(string.to_string()),
+                                string.to_string(),
+                                self.line,
+                            ));
                             continue; // has to go further to omit self.index += 1 after match.
                         }
                         '0'..='9' => {
@@ -146,7 +150,7 @@ impl<'a> Lexer<'a> {
 
                             let text = &self.source[start..self.index];
                             tokens.push(Token::new(
-                                token::KEYWORDS.get(text).copied().unwrap_or(Identifier),
+                                token::KEYWORDS.get(text).unwrap_or(&Identifier).clone(),
                                 text.to_string(),
                                 self.line,
                             ));
@@ -289,7 +293,7 @@ mod tests {
             got,
             vec![
                 Token::new(Print, "print".to_string(), 0),
-                Token::new(String("lol"), "lol".to_string(), 0),
+                Token::new(String("lol".to_string()), "lol".to_string(), 0),
             ]
         );
     }
@@ -306,7 +310,11 @@ mod tests {
                 Token::new(RightParen, ")".to_string(), 0),
                 Token::new(Less, "<".to_string(), 0),
                 Token::new(Greater, ">".to_string(), 0),
-                Token::new(String("hello world"), "hello world".to_string(), 0),
+                Token::new(
+                    String("hello world".to_string()),
+                    "hello world".to_string(),
+                    0
+                ),
                 Token::new(Bang, "!".to_string(), 0),
                 Token::new(Bang, "!".to_string(), 0),
                 Token::new(Bang, "!".to_string(), 0),
@@ -324,7 +332,11 @@ world"!!!"#;
                 Token::new(RightParen, ")".to_string(), 0),
                 Token::new(Less, "<".to_string(), 0),
                 Token::new(Greater, ">".to_string(), 0),
-                Token::new(String("hello\nworld"), "hello\nworld".to_string(), 1),
+                Token::new(
+                    String("hello\nworld".to_string()),
+                    "hello\nworld".to_string(),
+                    1
+                ),
                 Token::new(Bang, "!".to_string(), 1),
                 Token::new(Bang, "!".to_string(), 1),
                 Token::new(Bang, "!".to_string(), 1),

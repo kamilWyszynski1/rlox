@@ -22,6 +22,13 @@ impl Environment {
         }
     }
 
+    pub fn new_scope_with_environment(&mut self, env: Environment) {
+        match &mut self.nested {
+            None => self.nested = Some(Box::new(env)),
+            Some(ref mut nested) => nested.new_scope(),
+        }
+    }
+
     pub fn drop_scope(&mut self) {
         if let Some(nested) = self.nested.take() {
             if nested.nested.is_some() {
@@ -57,6 +64,13 @@ impl Environment {
                 self.values.insert(key, value);
             }
             Some(nested) => nested.define(key.clone(), value.clone()),
+        }
+    }
+
+    pub fn last_scope(&self) -> Environment {
+        match &self.nested {
+            None => self.clone(),
+            Some(nested) => nested.last_scope(),
         }
     }
 }

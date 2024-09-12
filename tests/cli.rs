@@ -75,3 +75,24 @@ fn test_loops_break() -> anyhow::Result<()> {
         .stdout(predicate::str::is_match(result)?);
     Ok(())
 }
+
+#[test]
+fn test_function_return() -> anyhow::Result<()> {
+    let mut cmd = Command::cargo_bin("rlox")?;
+
+    cmd.arg("-f").arg("examples/function.lox");
+    let result = r#"1\n2\n3\n1\n2\n3\n2\n3\n"#;
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::is_match(result)?);
+
+    let mut cmd = Command::cargo_bin("rlox")?;
+
+    cmd.arg("-f").arg("examples/function2.lox");
+    let result =
+        r#"0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n55\n89\n144\n233\n377\n610\n987\n1597\n2584\n4181"#;
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::is_match(result)?);
+    Ok(())
+}
