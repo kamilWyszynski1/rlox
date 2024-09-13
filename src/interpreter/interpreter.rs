@@ -3,6 +3,7 @@ use crate::interpreter::environment::Environment;
 use crate::interpreter::native::ClockCaller;
 use crate::representation::token::{Token, TokenType};
 use anyhow::{anyhow, bail, Context};
+use std::cell::RefCell;
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
 
@@ -15,7 +16,7 @@ pub trait LoxCallable: Debug {
     fn arity(&self) -> usize;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum RuntimeValue {
     Bool(bool),
     Null,
@@ -46,6 +47,19 @@ impl PartialEq for RuntimeValue {
             (RuntimeValue::String(lhs), RuntimeValue::String(rhs)) => lhs == rhs,
             _ => false,
         }
+    }
+}
+
+impl Debug for RuntimeValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            RuntimeValue::Bool(b) => b.to_string(),
+            RuntimeValue::Null => "null".to_string(),
+            RuntimeValue::Number(n) => n.to_string(),
+            RuntimeValue::String(s) => s.clone(),
+            RuntimeValue::Callable(_) => "callable".to_string(),
+        };
+        write!(f, "{}", str)
     }
 }
 
@@ -116,13 +130,13 @@ impl From<&LiteralValue> for RuntimeValue {
 
 #[derive(Debug, Clone)]
 struct CallableObject {
-    closure: Environment,
+    closure: Rc<RefCell<Environment>>,
     parameters: Vec<Token>,
     body: Vec<Stmt>,
 }
 
 impl CallableObject {
-    fn new(parameters: Vec<Token>, body: Vec<Stmt>, closure: Environment) -> Self {
+    fn new(parameters: Vec<Token>, body: Vec<Stmt>, closure: Rc<RefCell<Environment>>) -> Self {
         Self {
             parameters,
             body,
@@ -137,13 +151,16 @@ impl LoxCallable for CallableObject {
         interpreter: &mut Interpreter,
         arguments: Vec<RuntimeValue>,
     ) -> anyhow::Result<RuntimeValue> {
-        interpreter
-            .environment
-            .new_scope_with_environment(self.closure.clone());
+        let copied = interpreter.environment.clone();
+
+        // take function's saved environment and make copy of this, we don't want to
+        // make another reference because it would change original environment.
+        interpreter.environment = Rc::new(RefCell::new(self.closure.borrow().clone()));
 
         for (param, arg) in self.parameters.iter().zip(arguments.iter()) {
             interpreter
                 .environment
+                .try_borrow_mut()?
                 .define(param.lexeme.to_string(), arg.clone());
         }
 
@@ -152,8 +169,11 @@ impl LoxCallable for CallableObject {
             .context("error during function call")?
             .and_then(|exec_info| exec_info.function_return)
             .unwrap_or(RuntimeValue::Null);
-        interpreter.environment.drop_scope();
 
+        // update closure with changes that were made during function execution
+        *self.closure.borrow_mut() = interpreter.environment.borrow().clone();
+        // revert environment change
+        interpreter.environment = copied;
         Ok(value)
     }
 
@@ -172,18 +192,18 @@ pub struct ExecutionInfo {
 
 pub struct Interpreter {
     globals: Environment,
-    environment: Environment,
+    environment: Rc<RefCell<Environment>>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
-        let mut globals = Environment::new();
+        let mut globals = Environment::new_empty();
         globals.define(
             "clock".to_string(),
             RuntimeValue::Callable(Rc::new(ClockCaller::new())),
         );
         Self {
-            environment: globals.clone(),
+            environment: Rc::new(RefCell::from(globals.clone())),
             globals,
         }
     }
@@ -211,20 +231,26 @@ impl Interpreter {
                     Some(expr) => self.evaluate_expr(&expr)?,
                     None => RuntimeValue::Null,
                 };
-                self.environment.define(name.lexeme, value);
+                self.environment
+                    .try_borrow_mut()?
+                    .define(name.lexeme, value);
                 Ok(None)
             }
 
             Stmt::Block { statements } => {
-                self.environment.new_scope();
+                let previous = self.environment.clone();
+
+                self.environment =
+                    Rc::new(RefCell::new(Environment::new(self.environment.clone())));
                 for stmt in statements {
                     if let Some(exec_info) = self.execute(stmt)? {
                         if exec_info.loop_break || exec_info.function_return.is_some() {
+                            self.environment = previous;
                             return Ok(Some(exec_info));
                         }
                     }
                 }
-                self.environment.drop_scope();
+                self.environment = previous;
                 Ok(None)
             }
             Stmt::If {
@@ -262,12 +288,9 @@ impl Interpreter {
                 function_return: None,
             })),
             Stmt::Function { name, params, body } => {
-                let callable = Rc::new(CallableObject::new(
-                    params,
-                    body,
-                    self.environment.last_scope(),
-                ));
+                let callable = Rc::new(CallableObject::new(params, body, self.environment.clone()));
                 self.environment
+                    .try_borrow_mut()?
                     .define(name.lexeme.clone(), RuntimeValue::Callable(callable));
                 Ok(None)
             }
@@ -379,19 +402,20 @@ impl Interpreter {
             Expr::Literal(value) => Ok(RuntimeValue::from(value)),
             // To evaluate the grouping expression itself, we recursively evaluate that subexpression and return it.
             Expr::Grouping { expression } => self.evaluate_expr(expression),
-            Expr::Variable { name } => self
-                .environment
-                .get(&name.lexeme)
-                .context(format!("Undefined variable '{}'.", name.lexeme))
-                .cloned(),
+            Expr::Variable { name } => {
+                let var = self
+                    .environment
+                    .try_borrow()?
+                    .get(&name.lexeme)
+                    .context(format!("Undefined variable '{}'.", name.lexeme));
+                var
+            }
             Expr::Assign { name, value } => {
                 let value = self.evaluate_expr(value)?;
 
-                let variable = self
-                    .environment
-                    .get_mut(&name.lexeme)
-                    .context(format!("Undefined variable '{}'", name.lexeme))?;
-                *variable = value.clone();
+                self.environment
+                    .try_borrow_mut()?
+                    .assign(&name.lexeme, value.clone())?;
 
                 Ok(value)
             }

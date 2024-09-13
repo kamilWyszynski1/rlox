@@ -1,76 +1,89 @@
 use crate::interpreter::interpreter::RuntimeValue;
+use anyhow::bail;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt::{Debug, Formatter};
+use std::rc::Rc;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Environment {
     values: HashMap<String, RuntimeValue>,
-    nested: Option<Box<Environment>>,
+    enclosing: Option<Rc<RefCell<Environment>>>,
+}
+
+impl Debug for Environment {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_string("".to_string()))?;
+
+        Ok(())
+    }
 }
 
 impl Environment {
-    pub fn new() -> Self {
+    pub fn new_empty() -> Self {
         Self {
             values: HashMap::new(),
-            nested: None,
+            enclosing: None,
         }
     }
 
-    pub fn new_scope(&mut self) {
-        match &mut self.nested {
-            None => self.nested = Some(Box::new(Self::new())),
-            Some(ref mut nested) => nested.new_scope(),
+    pub fn new(enclosing: Rc<RefCell<Environment>>) -> Self {
+        Self {
+            values: HashMap::new(),
+            enclosing: Some(enclosing),
         }
     }
 
-    pub fn new_scope_with_environment(&mut self, env: Environment) {
-        match &mut self.nested {
-            None => self.nested = Some(Box::new(env)),
-            Some(ref mut nested) => nested.new_scope(),
-        }
-    }
-
-    pub fn drop_scope(&mut self) {
-        if let Some(nested) = self.nested.take() {
-            if nested.nested.is_some() {
-                self.nested = Some(nested);
-                self.nested.as_mut().unwrap().drop_scope();
+    pub fn get(&self, key: &str) -> Option<RuntimeValue> {
+        match self.values.get(key) {
+            Some(v) => Some(v.clone()),
+            None => {
+                if let Some(ref enclosing) = self.enclosing {
+                    let v = enclosing.borrow().get(key);
+                    v.clone()
+                } else {
+                    None
+                }
             }
         }
     }
 
-    pub fn get(&self, key: &str) -> Option<&RuntimeValue> {
-        match &self.nested {
-            None => self.values.get(key),
-            Some(nested) => match nested.get(key) {
-                None => self.values.get(key),
-                Some(value) => Some(value),
-            },
-        }
-    }
-
-    pub fn get_mut(&mut self, key: &str) -> Option<&mut RuntimeValue> {
-        match &mut self.nested {
-            None => self.values.get_mut(key),
-            Some(nested) => match nested.get_mut(key) {
-                None => self.values.get_mut(key),
-                Some(value) => Some(value),
-            },
+    pub fn assign(&mut self, key: &str, value: RuntimeValue) -> anyhow::Result<()> {
+        match self.values.get_mut(key) {
+            None => {
+                if let Some(ref mut enclosing) = self.enclosing {
+                    enclosing.borrow_mut().assign(key, value)
+                } else {
+                    bail!("Undefined variable {}", key)
+                }
+            }
+            Some(v) => {
+                *v = value;
+                Ok(())
+            }
         }
     }
 
     pub fn define(&mut self, key: String, value: RuntimeValue) {
-        match &mut self.nested {
-            None => {
-                self.values.insert(key, value);
-            }
-            Some(nested) => nested.define(key.clone(), value.clone()),
+        self.values.insert(key, value);
+    }
+
+    pub fn depth(&self) -> usize {
+        match &self.enclosing {
+            Some(enclosing) => 1 + enclosing.borrow().depth(),
+            None => 0,
         }
     }
 
-    pub fn last_scope(&self) -> Environment {
-        match &self.nested {
-            None => self.clone(),
-            Some(nested) => nested.last_scope(),
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    fn to_string(&self, ident: String) -> String {
+        let mut s = format!("{:?}", self.values);
+        if let Some(enclosing) = &self.enclosing {
+            s += &enclosing.borrow().to_string(ident + "\t");
         }
+        s
     }
 }

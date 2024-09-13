@@ -96,3 +96,15 @@ fn test_function_return() -> anyhow::Result<()> {
         .stdout(predicate::str::is_match(result)?);
     Ok(())
 }
+
+#[test]
+fn test_function_closure() -> anyhow::Result<()> {
+    let mut cmd = Command::cargo_bin("rlox")?;
+
+    cmd.arg("-f").arg("examples/function_local_function.lox");
+    let result = r#"1\n2\n3"#;
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::is_match(result)?);
+    Ok(())
+}
