@@ -80,10 +80,26 @@ impl Environment {
     }
 
     fn to_string(&self, ident: String) -> String {
-        let mut s = format!("{:?}", self.values);
+        let mut s = format!("\n{}{:?}", ident, self.values);
         if let Some(enclosing) = &self.enclosing {
             s += &enclosing.borrow().to_string(ident + "\t");
         }
         s
+    }
+
+    pub fn ancestor(&self, depth: usize) -> Option<Rc<RefCell<Environment>>> {
+        if depth == 0 {
+            return None; // should be cover by condition with 'depth == 1'
+        }
+        if depth == 1 && self.enclosing.is_some() {
+            return Some(self.enclosing.as_ref()?.clone());
+        }
+        if depth != 0 && self.enclosing.is_none() {
+            return None;
+        }
+        match &self.enclosing {
+            None => None,
+            Some(enclosing) => enclosing.borrow().ancestor(depth - 1),
+        }
     }
 }

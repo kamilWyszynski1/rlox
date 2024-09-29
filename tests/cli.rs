@@ -108,3 +108,15 @@ fn test_function_closure() -> anyhow::Result<()> {
         .stdout(predicate::str::is_match(result)?);
     Ok(())
 }
+
+#[test]
+fn test_function_static_scope() -> anyhow::Result<()> {
+    let mut cmd = Command::cargo_bin("rlox")?;
+
+    cmd.arg("-f").arg("examples/function_static_scope.lox");
+    let result = r#"global\nglobal"#;
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::is_match(result)?);
+    Ok(())
+}

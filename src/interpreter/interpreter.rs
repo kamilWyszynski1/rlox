@@ -4,6 +4,7 @@ use crate::interpreter::native::ClockCaller;
 use crate::representation::token::{Token, TokenType};
 use anyhow::{anyhow, bail, Context};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
 
@@ -155,7 +156,7 @@ impl LoxCallable for CallableObject {
 
         // take function's saved environment and make copy of this, we don't want to
         // make another reference because it would change original environment.
-        interpreter.environment = Rc::new(RefCell::new(self.closure.borrow().clone()));
+        interpreter.environment = Rc::new(RefCell::new(Environment::new(self.closure.clone())));
 
         for (param, arg) in self.parameters.iter().zip(arguments.iter()) {
             interpreter
@@ -165,7 +166,7 @@ impl LoxCallable for CallableObject {
         }
 
         let value = interpreter
-            .interpret(self.body.clone())
+            ._interpret(self.body.clone())
             .context("error during function call")?
             .and_then(|exec_info| exec_info.function_return)
             .unwrap_or(RuntimeValue::Null);
@@ -191,23 +192,31 @@ pub struct ExecutionInfo {
 }
 
 pub struct Interpreter {
-    globals: Environment,
+    globals: Rc<RefCell<Environment>>,
     environment: Rc<RefCell<Environment>>,
+    pub locals: HashMap<String, usize>, // maps variable name to how nested it's in Environment
 }
 
 impl Interpreter {
     pub fn new() -> Self {
-        let mut globals = Environment::new_empty();
-        globals.define(
+        let globals = Rc::new(RefCell::from(Environment::new_empty()));
+        globals.borrow_mut().define(
             "clock".to_string(),
             RuntimeValue::Callable(Rc::new(ClockCaller::new())),
         );
         Self {
-            environment: Rc::new(RefCell::from(globals.clone())),
+            environment: globals.clone(),
             globals,
+            locals: HashMap::new(),
         }
     }
+
     pub fn interpret(&mut self, statements: Vec<Stmt>) -> anyhow::Result<Option<ExecutionInfo>> {
+        println!("entrypoint {:?}", self.locals);
+        self._interpret(statements)
+    }
+
+    fn _interpret(&mut self, statements: Vec<Stmt>) -> anyhow::Result<Option<ExecutionInfo>> {
         for statement in statements {
             if let Some(exec_info) = self.execute(statement)? {
                 return Ok(Some(exec_info));
@@ -217,6 +226,7 @@ impl Interpreter {
     }
 
     fn execute(&mut self, statement: Stmt) -> anyhow::Result<Option<ExecutionInfo>> {
+        // println!("Executing: {:?}", statement);
         match statement {
             Stmt::Expression { expression } => {
                 self.evaluate_expr(&expression)?;
@@ -288,7 +298,8 @@ impl Interpreter {
                 function_return: None,
             })),
             Stmt::Function { name, params, body } => {
-                let callable = Rc::new(CallableObject::new(params, body, self.environment.clone()));
+                let function_env = Rc::new(RefCell::new(self.environment.borrow().clone()));
+                let callable = Rc::new(CallableObject::new(params, body, function_env));
                 self.environment
                     .try_borrow_mut()?
                     .define(name.lexeme.clone(), RuntimeValue::Callable(callable));
@@ -402,20 +413,19 @@ impl Interpreter {
             Expr::Literal(value) => Ok(RuntimeValue::from(value)),
             // To evaluate the grouping expression itself, we recursively evaluate that subexpression and return it.
             Expr::Grouping { expression } => self.evaluate_expr(expression),
-            Expr::Variable { name } => {
-                let var = self
-                    .environment
-                    .try_borrow()?
-                    .get(&name.lexeme)
-                    .context(format!("Undefined variable '{}'.", name.lexeme));
-                var
-            }
+            Expr::Variable { name } => self
+                .visit_expr_var(name)
+                .context(format!("cannot visit variable {}", name.lexeme.clone())),
             Expr::Assign { name, value } => {
                 let value = self.evaluate_expr(value)?;
 
-                self.environment
-                    .try_borrow_mut()?
-                    .assign(&name.lexeme, value.clone())?;
+                match self.locals.get(&name.lexeme) {
+                    Some(depth) => self.assign_at(name, value.clone(), *depth)?,
+                    None => self
+                        .globals
+                        .borrow_mut()
+                        .assign(&name.lexeme, value.clone())?,
+                }
 
                 Ok(value)
             }
@@ -456,6 +466,52 @@ impl Interpreter {
             }
         }
     }
+
+    fn visit_expr_var(&mut self, name: &Token) -> anyhow::Result<RuntimeValue> {
+        println!("visit_expr_var, {} \n{:?}", name.lexeme, &self.environment);
+        match self.locals.get(&name.lexeme) {
+            Some(depth) => {
+                let env = if *depth == 0 {
+                    self.environment.clone()
+                } else {
+                    match self.environment.borrow().ancestor(*depth) {
+                        Some(env) => env,
+                        None => bail!("cannot get environment with {} depth", depth),
+                    }
+                };
+                // dbg!(&env);
+                let v = env
+                    .borrow()
+                    .get(&name.lexeme)
+                    .context(format!("Undefined variable '{}'.", name.lexeme));
+                v
+            }
+            None => self
+                .globals
+                .borrow()
+                .get(&name.lexeme)
+                .context(format!("Undefined variable in globals '{}'.", name.lexeme)),
+        }
+    }
+
+    fn assign_at(&mut self, name: &Token, value: RuntimeValue, depth: usize) -> anyhow::Result<()> {
+        let env = if depth == 0 {
+            self.environment.clone()
+        } else {
+            match self.environment.borrow().ancestor(depth) {
+                Some(env) => env,
+                None => bail!("cannot get environment with {} depth", depth),
+            }
+        };
+        env.borrow_mut().assign(&name.lexeme, value)?;
+        Ok(())
+    }
+
+    pub fn resolve(&mut self, var_name: String, depth: usize) {
+        if !self.locals.contains_key(&var_name) {
+            self.locals.insert(var_name, depth);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -465,6 +521,7 @@ mod tests {
     use crate::ast::ast::LiteralValue::Number;
     use crate::ast::ast::*;
     use crate::ast::parser;
+    use crate::ast::resolver::Resolver;
     use crate::representation::lexer::Lexer;
     use crate::representation::token::Token;
 
@@ -620,11 +677,12 @@ mod tests {
 
 counter(1);
 "#;
-        let mut interpreter = Interpreter::new();
         let mut lexer = Lexer::new(&contents);
         let tokens = lexer.scan_tokens()?;
         let expressions = parser::Parser::new(tokens).parse()?;
-        interpreter.interpret(expressions)?;
+        Resolver::new(Interpreter::new())
+            .resolve(&expressions)?
+            .interpret(expressions)?;
         Ok(())
     }
 }

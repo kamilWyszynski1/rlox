@@ -11,6 +11,7 @@ mod interpreter;
 mod representation;
 
 use crate::ast::parser;
+use crate::ast::resolver::Resolver;
 use crate::interpreter::interpreter::Interpreter;
 use crate::representation::lexer::Lexer;
 
@@ -63,10 +64,12 @@ fn run_from_file(file: &str) -> anyhow::Result<()> {
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
 
-    let mut interpreter = Interpreter::new();
     let mut lexer = Lexer::new(&contents);
     let tokens = lexer.scan_tokens()?;
     let expressions = parser::Parser::new(tokens).parse()?;
+
+    let resolver: Resolver = Resolver::new(Interpreter::new());
+    let mut interpreter = resolver.resolve(&expressions)?;
     interpreter.interpret(expressions)?;
     Ok(())
 }

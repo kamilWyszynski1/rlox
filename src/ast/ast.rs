@@ -36,7 +36,7 @@ pub enum Stmt {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LiteralValue {
     True,
     False,
@@ -45,7 +45,7 @@ pub enum LiteralValue {
     String(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Binary {
         left: Box<Expr>,
@@ -109,13 +109,17 @@ impl Expr {
                 format!("(group {})", expression)
             }
             Expr::Variable { name } => {
-                format!("var {:?}", name)
+                format!("{:?}", name)
             }
             Expr::Assign { name, value } => {
-                format!("{:?} = {:?}", name, value)
+                format!("{:?} = ...", name)
             }
-            Expr::Logical { .. } => unimplemented!(),
-            Expr::Call { .. } => unimplemented!(),
+            Expr::Logical { .. } => "logical".to_string(),
+            Expr::Call {
+                callee,
+                paren,
+                arguments,
+            } => format!("call {}", callee.format_to_string()),
         }
     }
 }
