@@ -177,10 +177,11 @@ impl Resolver {
         if self.scopes.is_empty() {
             return Ok(());
         }
-        self.scopes
-            .front_mut()
-            .context("not front scope")?
-            .insert(name.lexeme.clone(), false);
+        let scope = self.scopes.front_mut().context("no front scope")?;
+        if scope.contains_key(&name.lexeme) {
+            bail!("Already a variable with this name in this scope.")
+        }
+        scope.insert(name.lexeme.clone(), false);
         Ok(())
     }
 
@@ -224,7 +225,7 @@ print counter(1);"#;
         let expressions = parser::Parser::new(tokens).parse()?;
 
         let resolver: Resolver = Resolver::new(Interpreter::new());
-        let interpreter = resolver.resolve(&expressions)?;
+        let _interpreter = resolver.resolve(&expressions)?;
         Ok(())
     }
 }

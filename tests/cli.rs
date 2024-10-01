@@ -1,27 +1,47 @@
 use assert_cmd::Command;
 use predicates::prelude::predicate;
 
-#[test]
-fn test_control_flow() -> anyhow::Result<()> {
-    let mut cmd = Command::cargo_bin("rlox")?;
-
-    cmd.arg("-f").arg("examples/control_flow_if.lox");
-    let result = r#"not equal
-hi
-yes
-"#;
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::is_match(result)?);
-    Ok(())
+macro_rules! test_set {
+    ($name:ident, $path:expr, $result:expr) => {
+        #[test]
+        fn $name() -> Result<(), Box<dyn std::error::Error>> {
+            let mut cmd = Command::cargo_bin("rlox")?;
+            cmd.arg("-f").arg($path);
+            cmd.assert()
+                .success()
+                .stdout(predicate::str::is_match($result)?);
+            Ok(())
+        }
+    };
 }
 
-#[test]
-fn test_scope() -> anyhow::Result<()> {
-    let mut cmd = Command::cargo_bin("rlox")?;
+macro_rules! test_set_error {
+    ($name:ident, $path:expr, $result:expr) => {
+        #[test]
+        fn $name() -> Result<(), Box<dyn std::error::Error>> {
+            let mut cmd = Command::cargo_bin("rlox")?;
+            cmd.arg("-f").arg($path);
+            cmd.assert()
+                .failure()
+                .stderr(predicate::str::is_match($result)?);
+            Ok(())
+        }
+    };
+}
 
-    cmd.arg("-f").arg("examples/scope.lox");
-    let result = r#"inner2 a
+test_set!(
+    test_control_flow,
+    "examples/control_flow_if.lox",
+    r#"not equal
+hi
+yes
+"#
+);
+
+test_set!(
+    test_scope,
+    "examples/scope.lox",
+    r#"inner2 a
 outer b
 global c
 inner2 a
@@ -32,13 +52,14 @@ outer b
 global c
 global a
 global b
-global c
-"#;
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::is_match(result)?);
-    Ok(())
-}
+global c"#
+);
+
+test_set_error!(
+    var_already_exists,
+    "examples/var_already_exists.lox",
+    r#"Error: Already a variable with this name in this scope."#
+);
 
 #[test]
 fn test_while_loop() -> anyhow::Result<()> {
