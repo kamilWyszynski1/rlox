@@ -149,7 +149,6 @@ impl Resolver {
         if self.scopes.is_empty() {
             return Ok(());
         }
-        // dbg!(&self.scopes);
         for i in 0..self.scopes.len() {
             if self
                 .scopes
@@ -157,7 +156,8 @@ impl Resolver {
                 .context("cannot get scope")?
                 .contains_key(&name.lexeme)
             {
-                self.interpreter.resolve(name.lexeme.clone(), i);
+                self.interpreter
+                    .resolve(name.lexeme.clone(), name.line, name.column, i);
                 return Ok(());
             }
         }
@@ -225,7 +225,6 @@ print counter(1);"#;
 
         let resolver: Resolver = Resolver::new(Interpreter::new());
         let interpreter = resolver.resolve(&expressions)?;
-        // dbg!(&interpreter.locals);
         Ok(())
     }
 }

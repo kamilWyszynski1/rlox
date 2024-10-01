@@ -7,6 +7,7 @@ pub struct Lexer<'a> {
     source: &'a str,
     index: usize,
     line: usize,
+    column: usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -15,6 +16,7 @@ impl<'a> Lexer<'a> {
             source,
             line: 0,
             index: 0,
+            column: 0,
         }
     }
 
@@ -34,10 +36,12 @@ impl<'a> Lexer<'a> {
                         '\n' => {
                             self.line += 1;
                             self.index += 1;
+                            self.column = 0;
                             continue;
                         }
                         ' ' | '\t' => {
                             self.index += 1; // skip this character
+                            self.column += 1;
                             continue;
                         } // ignore whitespaces
                         '(' => LeftParen,
@@ -56,6 +60,7 @@ impl<'a> Lexer<'a> {
                                     && !self.is_end()
                                 {
                                     self.index += 1;
+                                    self.column += 1;
                                 }
                                 continue;
                             } else {
@@ -97,6 +102,7 @@ impl<'a> Lexer<'a> {
                         }
                         '"' => {
                             self.index += 1; // skip opening "
+                            self.column += 1;
                             let start = self.index;
                             // parse string literal
                             while self.source.chars().nth(self.index) != Some('"') && !self.is_end()
@@ -112,12 +118,14 @@ impl<'a> Lexer<'a> {
                             }
 
                             self.index += 1; // closing " character
+                            self.column += 1;
 
                             let string = &self.source[start..self.index - 1];
                             tokens.push(Token::new(
                                 String(string.to_string()),
                                 string.to_string(),
                                 self.line,
+                                self.column,
                             ));
                             continue; // has to go further to omit self.index += 1 after match.
                         }
@@ -125,12 +133,15 @@ impl<'a> Lexer<'a> {
                             let start = self.index;
                             while is_digit(self.peek()) {
                                 self.index += 1;
+                                self.column += 1;
                             }
 
                             if self.peek() == Some('.') && is_digit(self.peek_next()) {
                                 self.index += 1;
+                                self.column += 1;
                                 while is_digit(self.peek()) {
                                     self.index += 1;
+                                    self.column += 1;
                                 }
                             }
 
@@ -139,6 +150,7 @@ impl<'a> Lexer<'a> {
                                 Number(number.parse()?),
                                 number.to_string(),
                                 self.line,
+                                self.column - 1,
                             ));
                             continue;
                         }
@@ -146,6 +158,7 @@ impl<'a> Lexer<'a> {
                             let start = self.index;
                             while is_alphanumeric(self.peek()) {
                                 self.index += 1;
+                                self.column += 1;
                             }
 
                             let text = &self.source[start..self.index];
@@ -153,6 +166,7 @@ impl<'a> Lexer<'a> {
                                 token::KEYWORDS.get(text).unwrap_or(&Identifier).clone(),
                                 text.to_string(),
                                 self.line,
+                                self.column,
                             ));
                             continue;
                         }
@@ -164,10 +178,12 @@ impl<'a> Lexer<'a> {
                         token_type,
                         self.source[start..end].to_string(),
                         self.line,
+                        self.column,
                     ));
                 }
             }
             self.index += 1;
+            self.column += 1;
         }
         Ok(tokens)
     }
@@ -184,14 +200,6 @@ impl<'a> Lexer<'a> {
     /// Returns current character without consuming
     fn peek_next(&self) -> Option<char> {
         self.source.chars().nth(self.index + 1)
-    }
-
-    fn is_digit(&self) -> bool {
-        if let Some(ch) = self.source.chars().nth(self.index) {
-            ch.is_ascii_digit()
-        } else {
-            false
-        }
     }
 
     fn match_character(&mut self, ch: char) -> bool {
@@ -234,36 +242,36 @@ mod tests {
     fn test_scan_tokens() {
         let mut lexer = Lexer::new("()!=");
         let expected = vec![
-            Token::new(LeftParen, "(".to_string(), 0),
-            Token::new(RightParen, ")".to_string(), 0),
-            Token::new(BangEqual, "!=".to_string(), 0),
+            Token::new(LeftParen, "(".to_string(), 0, 0),
+            Token::new(RightParen, ")".to_string(), 0, 1),
+            Token::new(BangEqual, "!=".to_string(), 0, 2),
         ];
         let got = lexer.scan_tokens().unwrap();
         assert_eq!(expected, got);
 
         let input = "
-        // this is a comment
+// this is a comment
 (( )){} // grouping stuff
 !*+-/=<> <= == // operators
 ";
 
         let expected = vec![
-            Token::new(LeftParen, "(".to_string(), 2),
-            Token::new(LeftParen, "(".to_string(), 2),
-            Token::new(RightParen, ")".to_string(), 2),
-            Token::new(RightParen, ")".to_string(), 2),
-            Token::new(LeftBrace, "{".to_string(), 2),
-            Token::new(RightBrace, "}".to_string(), 2),
-            Token::new(Bang, "!".to_string(), 3),
-            Token::new(Star, "*".to_string(), 3),
-            Token::new(Plus, "+".to_string(), 3),
-            Token::new(Minus, "-".to_string(), 3),
-            Token::new(Slash, "/".to_string(), 3),
-            Token::new(Equal, "=".to_string(), 3),
-            Token::new(Less, "<".to_string(), 3),
-            Token::new(Greater, ">".to_string(), 3),
-            Token::new(LessEqual, "<=".to_string(), 3),
-            Token::new(EqualEqual, "==".to_string(), 3),
+            Token::new(LeftParen, "(".to_string(), 2, 0),
+            Token::new(LeftParen, "(".to_string(), 2, 1),
+            Token::new(RightParen, ")".to_string(), 2, 3),
+            Token::new(RightParen, ")".to_string(), 2, 4),
+            Token::new(LeftBrace, "{".to_string(), 2, 5),
+            Token::new(RightBrace, "}".to_string(), 2, 6),
+            Token::new(Bang, "!".to_string(), 3, 0),
+            Token::new(Star, "*".to_string(), 3, 1),
+            Token::new(Plus, "+".to_string(), 3, 2),
+            Token::new(Minus, "-".to_string(), 3, 3),
+            Token::new(Slash, "/".to_string(), 3, 4),
+            Token::new(Equal, "=".to_string(), 3, 5),
+            Token::new(Less, "<".to_string(), 3, 6),
+            Token::new(Greater, ">".to_string(), 3, 7),
+            Token::new(LessEqual, "<=".to_string(), 3, 9),
+            Token::new(EqualEqual, "==".to_string(), 3, 11),
         ];
 
         let mut lexer = Lexer::new(input);
@@ -276,13 +284,13 @@ mod tests {
         assert_eq!(
             got,
             vec![
-                Token::new(LeftParen, "(".to_string(), 0),
-                Token::new(Number(1.), "1".to_string(), 0),
-                Token::new(Plus, "+".to_string(), 0),
-                Token::new(Number(2.), "2".to_string(), 0),
-                Token::new(RightParen, ")".to_string(), 0),
-                Token::new(Star, "*".to_string(), 0),
-                Token::new(Number(3.), "3".to_string(), 0),
+                Token::new(LeftParen, "(".to_string(), 0, 0),
+                Token::new(Number(1.), "1".to_string(), 0, 1),
+                Token::new(Plus, "+".to_string(), 0, 2),
+                Token::new(Number(2.), "2".to_string(), 0, 3),
+                Token::new(RightParen, ")".to_string(), 0, 4),
+                Token::new(Star, "*".to_string(), 0, 5),
+                Token::new(Number(3.), "3".to_string(), 0, 6),
             ]
         );
 
@@ -292,8 +300,8 @@ mod tests {
         assert_eq!(
             got,
             vec![
-                Token::new(Print, "print".to_string(), 0),
-                Token::new(String("lol".to_string()), "lol".to_string(), 0),
+                Token::new(Print, "print".to_string(), 0, 5),
+                Token::new(String("lol".to_string()), "lol".to_string(), 0, 8),
             ]
         );
     }
@@ -306,18 +314,19 @@ mod tests {
         let got = lexer.scan_tokens().unwrap();
         assert_eq!(
             vec![
-                Token::new(LeftParen, "(".to_string(), 0),
-                Token::new(RightParen, ")".to_string(), 0),
-                Token::new(Less, "<".to_string(), 0),
-                Token::new(Greater, ">".to_string(), 0),
+                Token::new(LeftParen, "(".to_string(), 0, 0),
+                Token::new(RightParen, ")".to_string(), 0, 1),
+                Token::new(Less, "<".to_string(), 0, 2),
+                Token::new(Greater, ">".to_string(), 0, 3),
                 Token::new(
                     String("hello world".to_string()),
                     "hello world".to_string(),
-                    0
+                    0,
+                    6
                 ),
-                Token::new(Bang, "!".to_string(), 0),
-                Token::new(Bang, "!".to_string(), 0),
-                Token::new(Bang, "!".to_string(), 0),
+                Token::new(Bang, "!".to_string(), 0, 6),
+                Token::new(Bang, "!".to_string(), 0, 7),
+                Token::new(Bang, "!".to_string(), 0, 8),
             ],
             got
         );
@@ -328,18 +337,19 @@ world"!!!"#;
         let got = lexer.scan_tokens().unwrap();
         assert_eq!(
             vec![
-                Token::new(LeftParen, "(".to_string(), 0),
-                Token::new(RightParen, ")".to_string(), 0),
-                Token::new(Less, "<".to_string(), 0),
-                Token::new(Greater, ">".to_string(), 0),
+                Token::new(LeftParen, "(".to_string(), 0, 0),
+                Token::new(RightParen, ")".to_string(), 0, 1),
+                Token::new(Less, "<".to_string(), 0, 2),
+                Token::new(Greater, ">".to_string(), 0, 3),
                 Token::new(
                     String("hello\nworld".to_string()),
                     "hello\nworld".to_string(),
-                    1
+                    1,
+                    6
                 ),
-                Token::new(Bang, "!".to_string(), 1),
-                Token::new(Bang, "!".to_string(), 1),
-                Token::new(Bang, "!".to_string(), 1),
+                Token::new(Bang, "!".to_string(), 1, 6),
+                Token::new(Bang, "!".to_string(), 1, 7),
+                Token::new(Bang, "!".to_string(), 1, 8),
             ],
             got
         );
@@ -352,11 +362,11 @@ world"!!!"#;
         let got = lexer.scan_tokens().unwrap();
         assert_eq!(
             vec![
-                Token::new(Number(123123.), "123123".to_string(), 0),
-                Token::new(Bang, "!".to_string(), 0),
-                Token::new(Less, "<".to_string(), 0),
-                Token::new(Greater, ">".to_string(), 0),
-                Token::new(Number(123.534), "123.534".to_string(), 0),
+                Token::new(Number(123123.), "123123".to_string(), 0, 5),
+                Token::new(Bang, "!".to_string(), 0, 6),
+                Token::new(Less, "<".to_string(), 0, 7),
+                Token::new(Greater, ">".to_string(), 0, 8),
+                Token::new(Number(123.534), "123.534".to_string(), 0, 15),
             ],
             got
         );
@@ -370,22 +380,22 @@ world"!!!"#;
         let got = lexer.scan_tokens().unwrap();
         assert_eq!(
             vec![
-                Token::new(If, "if".to_string(), 0),
-                Token::new(Else, "else".to_string(), 0),
-                Token::new(For, "for".to_string(), 0),
-                Token::new(While, "while".to_string(), 0),
-                Token::new(Fun, "fun".to_string(), 0),
-                Token::new(Return, "return".to_string(), 0),
-                Token::new(And, "and".to_string(), 0),
-                Token::new(Class, "class".to_string(), 0),
-                Token::new(False, "false".to_string(), 0),
-                Token::new(Nil, "nil".to_string(), 0),
-                Token::new(Or, "or".to_string(), 0),
-                Token::new(Print, "print".to_string(), 0),
-                Token::new(Super, "super".to_string(), 0),
-                Token::new(This, "this".to_string(), 0),
-                Token::new(True, "true".to_string(), 0),
-                Token::new(Var, "var".to_string(), 0)
+                Token::new(If, "if".to_string(), 0, 2),
+                Token::new(Else, "else".to_string(), 0, 7),
+                Token::new(For, "for".to_string(), 0, 11),
+                Token::new(While, "while".to_string(), 0, 17),
+                Token::new(Fun, "fun".to_string(), 0, 21),
+                Token::new(Return, "return".to_string(), 0, 28),
+                Token::new(And, "and".to_string(), 0, 32),
+                Token::new(Class, "class".to_string(), 0, 38),
+                Token::new(False, "false".to_string(), 0, 44),
+                Token::new(Nil, "nil".to_string(), 0, 48),
+                Token::new(Or, "or".to_string(), 0, 51),
+                Token::new(Print, "print".to_string(), 0, 57),
+                Token::new(Super, "super".to_string(), 0, 63),
+                Token::new(This, "this".to_string(), 0, 68),
+                Token::new(True, "true".to_string(), 0, 73),
+                Token::new(Var, "var".to_string(), 0, 77)
             ],
             got
         );
@@ -395,10 +405,10 @@ world"!!!"#;
         let got = lexer.scan_tokens().unwrap();
         assert_eq!(
             vec![
-                Token::new(Identifier, "variableName".to_string(), 0),
-                Token::new(Identifier, "variableName".to_string(), 0),
-                Token::new(Identifier, "variable_name".to_string(), 0),
-                Token::new(Identifier, "_variable_name".to_string(), 0),
+                Token::new(Identifier, "variableName".to_string(), 0, 12),
+                Token::new(Identifier, "variableName".to_string(), 0, 25),
+                Token::new(Identifier, "variable_name".to_string(), 0, 39),
+                Token::new(Identifier, "_variable_name".to_string(), 0, 54),
             ],
             got
         );

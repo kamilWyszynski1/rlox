@@ -12,3 +12,14 @@ var counter = makeCounter();
 counter(); // "1".
 counter(); // "2".
 counter(); // "3".
+
+var j = 0;
+fun foo() {
+  j = j + 1;
+  print j;
+}
+
+foo();
+foo();
+
+

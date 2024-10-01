@@ -172,7 +172,7 @@ impl LoxCallable for CallableObject {
             .unwrap_or(RuntimeValue::Null);
 
         // update closure with changes that were made during function execution
-        *self.closure.borrow_mut() = interpreter.environment.borrow().clone();
+        // *self.closure.borrow_mut() = interpreter.environment.borrow().clone();
         // revert environment change
         interpreter.environment = copied;
         Ok(value)
@@ -191,10 +191,23 @@ pub struct ExecutionInfo {
     function_return: Option<RuntimeValue>,
 }
 
+#[derive(Clone, Hash, PartialEq, Eq)]
+struct ExprNameWithLine {
+    name: String,
+    line: usize,
+    column: usize,
+}
+
+impl Debug for ExprNameWithLine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.name)
+    }
+}
+
 pub struct Interpreter {
     globals: Rc<RefCell<Environment>>,
     environment: Rc<RefCell<Environment>>,
-    pub locals: HashMap<String, usize>, // maps variable name to how nested it's in Environment
+    locals: HashMap<ExprNameWithLine, usize>, // maps variable name to how nested it's in Environment
 }
 
 impl Interpreter {
@@ -212,7 +225,6 @@ impl Interpreter {
     }
 
     pub fn interpret(&mut self, statements: Vec<Stmt>) -> anyhow::Result<Option<ExecutionInfo>> {
-        println!("entrypoint {:?}", self.locals);
         self._interpret(statements)
     }
 
@@ -226,7 +238,6 @@ impl Interpreter {
     }
 
     fn execute(&mut self, statement: Stmt) -> anyhow::Result<Option<ExecutionInfo>> {
-        // println!("Executing: {:?}", statement);
         match statement {
             Stmt::Expression { expression } => {
                 self.evaluate_expr(&expression)?;
@@ -413,13 +424,20 @@ impl Interpreter {
             Expr::Literal(value) => Ok(RuntimeValue::from(value)),
             // To evaluate the grouping expression itself, we recursively evaluate that subexpression and return it.
             Expr::Grouping { expression } => self.evaluate_expr(expression),
-            Expr::Variable { name } => self
-                .visit_expr_var(name)
-                .context(format!("cannot visit variable {}", name.lexeme.clone())),
+            Expr::Variable { name } => self.visit_expr_var(name).context(format!(
+                "cannot visit variable {}, line {}",
+                name.lexeme.clone(),
+                name.line
+            )),
             Expr::Assign { name, value } => {
                 let value = self.evaluate_expr(value)?;
 
-                match self.locals.get(&name.lexeme) {
+                let key = ExprNameWithLine {
+                    name: name.lexeme.clone(),
+                    line: name.line,
+                    column: name.column,
+                };
+                match self.locals.get(&key) {
                     Some(depth) => self.assign_at(name, value.clone(), *depth)?,
                     None => self
                         .globals
@@ -468,8 +486,12 @@ impl Interpreter {
     }
 
     fn visit_expr_var(&mut self, name: &Token) -> anyhow::Result<RuntimeValue> {
-        println!("visit_expr_var, {} \n{:?}", name.lexeme, &self.environment);
-        match self.locals.get(&name.lexeme) {
+        let key = ExprNameWithLine {
+            name: name.lexeme.clone(),
+            line: name.line,
+            column: name.column,
+        };
+        match self.locals.get(&key) {
             Some(depth) => {
                 let env = if *depth == 0 {
                     self.environment.clone()
@@ -479,7 +501,6 @@ impl Interpreter {
                         None => bail!("cannot get environment with {} depth", depth),
                     }
                 };
-                // dbg!(&env);
                 let v = env
                     .borrow()
                     .get(&name.lexeme)
@@ -507,10 +528,9 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn resolve(&mut self, var_name: String, depth: usize) {
-        if !self.locals.contains_key(&var_name) {
-            self.locals.insert(var_name, depth);
-        }
+    pub fn resolve(&mut self, name: String, line: usize, column: usize, depth: usize) {
+        self.locals
+            .insert(ExprNameWithLine { name, line, column }, depth);
     }
 }
 
@@ -552,6 +572,7 @@ mod tests {
                 token_type: operator,
                 lexeme: "".to_string(),
                 line: 1,
+                column: 0,
             },
             right: Box::new(right),
         }
@@ -563,6 +584,7 @@ mod tests {
                 token_type: operator,
                 lexeme: "".to_string(),
                 line: 1,
+                column: 0,
             },
             right: Box::new(right),
         }
@@ -645,6 +667,7 @@ mod tests {
                 token_type: TokenType::Plus,
                 lexeme: "+".to_string(),
                 line: 1,
+                column: 0,
             },
             right: Box::new(Expr::Grouping {
                 expression: Box::new(Expr::Binary {
@@ -653,6 +676,7 @@ mod tests {
                         token_type: TokenType::Star,
                         lexeme: "*".to_string(),
                         line: 1,
+                        column: 0,
                     },
                     right: Box::new(Expr::Literal(Number(3.))),
                 }),

@@ -7,14 +7,16 @@ pub struct Token {
     pub(crate) token_type: TokenType,
     pub lexeme: String,
     pub(crate) line: usize,
+    pub(crate) column: usize,
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, lexeme: String, line: usize) -> Self {
+    pub fn new(token_type: TokenType, lexeme: String, line: usize, column: usize) -> Self {
         Self {
             token_type,
             lexeme,
             line,
+            column,
         }
     }
 }

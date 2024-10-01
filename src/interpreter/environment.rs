@@ -71,7 +71,7 @@ impl Environment {
     pub fn depth(&self) -> usize {
         match &self.enclosing {
             Some(enclosing) => 1 + enclosing.borrow().depth(),
-            None => 0,
+            None => 1,
         }
     }
 
