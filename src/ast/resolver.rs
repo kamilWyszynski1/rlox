@@ -7,6 +7,8 @@ use std::collections::{HashMap, VecDeque};
 pub struct Resolver {
     interpreter: Interpreter,
     scopes: VecDeque<HashMap<String, bool>>,
+
+    is_function_body: bool,
 }
 
 impl Resolver {
@@ -14,6 +16,7 @@ impl Resolver {
         Self {
             interpreter,
             scopes: VecDeque::new(),
+            is_function_body: false,
         }
     }
 
@@ -33,10 +36,17 @@ impl Resolver {
         match stmt {
             Stmt::Expression { expression } => self.resolve_expr(&expression)?,
             Stmt::Function { name, params, body } => {
+                let reset = if !self.is_function_body { true } else { false };
+                self.is_function_body = true;
                 self.declare(&name)?;
                 self.define(&name)?;
 
                 self.resolve_function(params, body)?;
+                if reset {
+                    // reset only if it's first-level function call, we should not reset
+                    // variable in case of closures
+                    self.is_function_body = false;
+                }
             }
             Stmt::Print { expression } => self.resolve_expr(&expression)?,
             Stmt::Var { name, initializer } => {
@@ -62,6 +72,10 @@ impl Resolver {
             }
             Stmt::Break => {}
             Stmt::Return { expr, keyword } => {
+                if !self.is_function_body {
+                    println!("{} {}", keyword.line, keyword.column);
+                    bail!("Can't return from top-level code.")
+                }
                 if let Some(expr) = expr {
                     self.resolve_expr(&expr)?;
                 }

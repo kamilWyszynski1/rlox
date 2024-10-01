@@ -61,6 +61,12 @@ test_set_error!(
     r#"Error: Already a variable with this name in this scope."#
 );
 
+test_set_error!(
+    invalid_top_level_return,
+    "examples/invalid_return.lox",
+    "Error: Can't return from top-level code."
+);
+
 #[test]
 fn test_while_loop() -> anyhow::Result<()> {
     let mut cmd = Command::cargo_bin("rlox")?;
