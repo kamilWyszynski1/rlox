@@ -67,6 +67,12 @@ test_set_error!(
     "Error: Can't return from top-level code."
 );
 
+// test_set_error!(
+//     variable_not_used,
+//     "examples/variable_not_used.lox",
+//     "Error: Variable b is never used"
+// );
+
 #[test]
 fn test_while_loop() -> anyhow::Result<()> {
     let mut cmd = Command::cargo_bin("rlox")?;

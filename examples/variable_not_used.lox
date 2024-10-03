@@ -1,0 +1,6 @@
+fun foo() {
+    var a = "lol";
+    var b = "420";
+    
+    print a;
+}

@@ -4,9 +4,16 @@ use crate::representation::token::Token;
 use anyhow::{bail, Context};
 use std::collections::{HashMap, VecDeque};
 
+#[derive(Debug, Clone)]
+struct VariableInfo {
+    is_defined: bool,
+    is_used: bool,
+    is_function_param: bool,
+}
+
 pub struct Resolver {
     interpreter: Interpreter,
-    scopes: VecDeque<HashMap<String, bool>>,
+    scopes: VecDeque<HashMap<String, VariableInfo>>,
 
     is_function_body: bool,
 }
@@ -38,8 +45,8 @@ impl Resolver {
             Stmt::Function { name, params, body } => {
                 let reset = if !self.is_function_body { true } else { false };
                 self.is_function_body = true;
-                self.declare(&name)?;
-                self.define(&name)?;
+                self.declare(&name, false)?;
+                self.define(&name, false)?;
 
                 self.resolve_function(params, body)?;
                 if reset {
@@ -50,18 +57,18 @@ impl Resolver {
             }
             Stmt::Print { expression } => self.resolve_expr(&expression)?,
             Stmt::Var { name, initializer } => {
-                self.declare(&name)?; // mark as declared but not defined
+                self.declare(&name, false)?; // mark as declared but not defined
                 if let Some(initializer) = initializer {
                     self.resolve_expr(&initializer)?;
                 }
-                self.define(&name)?; // define after initialization
+                self.define(&name, false)?; // define after initialization
             }
             Stmt::Block { statements } => {
                 self.begin_scope();
                 for statement in statements {
                     self.resolve_stmt(statement)?;
                 }
-                self.end_scope();
+                self.end_scope()?;
             }
             Stmt::While {
                 condition,
@@ -98,11 +105,11 @@ impl Resolver {
     fn resolve_function(&mut self, params: &[Token], body: &[Stmt]) -> anyhow::Result<()> {
         self.begin_scope();
         for param in params {
-            self.declare(&param)?;
-            self.define(&param)?;
+            self.declare(&param, true)?;
+            self.define(&param, true)?;
         }
         self._resolve(body)?;
-        self.end_scope();
+        self.end_scope()?;
         Ok(())
     }
 
@@ -124,8 +131,8 @@ impl Resolver {
             Expr::Variable { name } => {
                 if !self.scopes.is_empty() {
                     if let Some(scope) = self.scopes.front() {
-                        if let Some(value) = scope.get(&name.lexeme) {
-                            if !*value {
+                        if let Some(info) = scope.get(&name.lexeme) {
+                            if !info.is_defined {
                                 bail!("Can't read local variable in its own initializer.")
                             }
                         }
@@ -164,12 +171,9 @@ impl Resolver {
             return Ok(());
         }
         for i in 0..self.scopes.len() {
-            if self
-                .scopes
-                .get(i)
-                .context("cannot get scope")?
-                .contains_key(&name.lexeme)
-            {
+            let scope = self.scopes.get_mut(i).context("cannot get scope")?;
+            if scope.contains_key(&name.lexeme) {
+                scope.get_mut(&name.lexeme).unwrap().is_used = true;
                 self.interpreter
                     .resolve(name.lexeme.clone(), name.line, name.column, i);
                 return Ok(());
@@ -183,11 +187,20 @@ impl Resolver {
         self.scopes.push_front(HashMap::new());
     }
 
-    fn end_scope(&mut self) {
-        self.scopes.pop_front();
+    fn end_scope(&mut self) -> anyhow::Result<()> {
+        if let Some(scope) = self.scopes.pop_front() {
+            // Check whether all variables are used, if not report an error.
+            // For now, it will only work for function's local variables.
+            for (name, info) in scope {
+                if !info.is_used && !info.is_function_param && !name.starts_with('_') {
+                    bail!("Variable {name} is never used")
+                }
+            }
+        }
+        Ok(())
     }
 
-    fn declare(&mut self, name: &Token) -> anyhow::Result<()> {
+    fn declare(&mut self, name: &Token, is_function_param: bool) -> anyhow::Result<()> {
         if self.scopes.is_empty() {
             return Ok(());
         }
@@ -195,18 +208,29 @@ impl Resolver {
         if scope.contains_key(&name.lexeme) {
             bail!("Already a variable with this name in this scope.")
         }
-        scope.insert(name.lexeme.clone(), false);
+        scope.insert(
+            name.lexeme.clone(),
+            VariableInfo {
+                is_used: false,
+                is_defined: false,
+                is_function_param,
+            },
+        );
         Ok(())
     }
 
-    fn define(&mut self, name: &Token) -> anyhow::Result<()> {
+    fn define(&mut self, name: &Token, is_function_param: bool) -> anyhow::Result<()> {
         if self.scopes.is_empty() {
             return Ok(());
         }
-        self.scopes
-            .front_mut()
-            .context("no front scope")?
-            .insert(name.lexeme.clone(), true);
+        self.scopes.front_mut().context("no front scope")?.insert(
+            name.lexeme.clone(),
+            VariableInfo {
+                is_defined: true,
+                is_used: false,
+                is_function_param,
+            },
+        );
         Ok(())
     }
 }
