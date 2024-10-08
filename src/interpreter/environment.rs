@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 #[derive(Clone)]
 pub struct Environment {
-    values: HashMap<String, RuntimeValue>,
+    values: HashMap<String, Rc<RefCell<RuntimeValue>>>,
     enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
@@ -34,7 +34,7 @@ impl Environment {
         }
     }
 
-    pub fn get(&self, key: &str) -> Option<RuntimeValue> {
+    pub fn get(&self, key: &str) -> Option<Rc<RefCell<RuntimeValue>>> {
         match self.values.get(key) {
             Some(v) => Some(v.clone()),
             None => {
@@ -48,7 +48,7 @@ impl Environment {
         }
     }
 
-    pub fn assign(&mut self, key: &str, value: RuntimeValue) -> anyhow::Result<()> {
+    pub fn assign(&mut self, key: &str, value: Rc<RefCell<RuntimeValue>>) -> anyhow::Result<()> {
         match self.values.get_mut(key) {
             None => {
                 if let Some(ref mut enclosing) = self.enclosing {
@@ -64,7 +64,7 @@ impl Environment {
         }
     }
 
-    pub fn define(&mut self, key: String, value: RuntimeValue) {
+    pub fn define(&mut self, key: String, value: Rc<RefCell<RuntimeValue>>) {
         self.values.insert(key, value);
     }
 

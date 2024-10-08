@@ -1,6 +1,8 @@
 use crate::interpreter::interpreter::{Interpreter, LoxCallable};
 use crate::interpreter::runtime::RuntimeValue;
+use std::cell::RefCell;
 use std::fmt::Display;
+use std::rc::Rc;
 
 #[derive(Debug, Clone)]
 pub struct LoxInstance {
@@ -40,9 +42,11 @@ impl LoxCallable for LoxClass {
     fn call(
         &self,
         _interpreter: &mut Interpreter,
-        _arguments: Vec<RuntimeValue>,
-    ) -> anyhow::Result<RuntimeValue> {
-        Ok(RuntimeValue::Instance(LoxInstance::new(self.clone())))
+        _arguments: Vec<Rc<RefCell<RuntimeValue>>>,
+    ) -> anyhow::Result<Rc<RefCell<RuntimeValue>>> {
+        Ok(Rc::new(RefCell::new(RuntimeValue::Instance(
+            LoxInstance::new(self.clone()),
+        ))))
     }
 
     fn arity(&self) -> usize {

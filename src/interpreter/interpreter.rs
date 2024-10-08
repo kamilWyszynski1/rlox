@@ -14,8 +14,8 @@ pub trait LoxCallable: Debug + Display {
     fn call(
         &self,
         interpreter: &mut Interpreter,
-        arguments: Vec<RuntimeValue>,
-    ) -> anyhow::Result<RuntimeValue>;
+        arguments: Vec<Rc<RefCell<RuntimeValue>>>,
+    ) -> anyhow::Result<Rc<RefCell<RuntimeValue>>>;
     fn arity(&self) -> usize;
 }
 
@@ -46,8 +46,8 @@ impl LoxCallable for CallableObject {
     fn call(
         &self,
         interpreter: &mut Interpreter,
-        arguments: Vec<RuntimeValue>,
-    ) -> anyhow::Result<RuntimeValue> {
+        arguments: Vec<Rc<RefCell<RuntimeValue>>>,
+    ) -> anyhow::Result<Rc<RefCell<RuntimeValue>>> {
         let copied = interpreter.environment.clone();
 
         // take function's saved environment and make copy of this, we don't want to
@@ -65,7 +65,7 @@ impl LoxCallable for CallableObject {
             ._interpret(self.body.clone())
             .context("error during function call")?
             .and_then(|exec_info| exec_info.function_return)
-            .unwrap_or(RuntimeValue::Null);
+            .unwrap_or(Rc::new(RefCell::new(RuntimeValue::Null)));
 
         // update closure with changes that were made during function execution
         // *self.closure.borrow_mut() = interpreter.environment.borrow().clone();
@@ -84,7 +84,7 @@ impl LoxCallable for CallableObject {
 #[derive(Debug, Clone)]
 pub struct ExecutionInfo {
     loop_break: bool,
-    function_return: Option<RuntimeValue>,
+    function_return: Option<Rc<RefCell<RuntimeValue>>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -111,7 +111,9 @@ impl Interpreter {
         let globals = Rc::new(RefCell::from(Environment::new_empty()));
         globals.borrow_mut().define(
             "clock".to_string(),
-            RuntimeValue::Callable(Rc::new(ClockCaller::new())),
+            Rc::new(RefCell::new(RuntimeValue::Callable(Rc::new(
+                ClockCaller::new(),
+            )))),
         );
         Self {
             environment: globals.clone(),
@@ -140,13 +142,13 @@ impl Interpreter {
                 Ok(None)
             }
             Stmt::Print { expression } => {
-                println!("{}", self.evaluate_expr(&expression)?);
+                println!("{}", self.evaluate_expr(&expression)?.borrow());
                 Ok(None)
             }
             Stmt::Var { name, initializer } => {
                 let value = match initializer {
                     Some(expr) => self.evaluate_expr(&expr)?,
-                    None => RuntimeValue::Null,
+                    None => Rc::new(RefCell::new(RuntimeValue::Null)),
                 };
                 self.environment
                     .try_borrow_mut()?
@@ -176,7 +178,7 @@ impl Interpreter {
                 else_branch,
             } => {
                 let evaluation = self.evaluate_expr(&condition)?;
-                if evaluation.is_truthy() {
+                if evaluation.try_borrow()?.is_truthy() {
                     self.execute(*then_branch)
                 } else if let Some(else_stmt) = else_branch {
                     self.execute(*else_stmt)
@@ -188,7 +190,7 @@ impl Interpreter {
                 condition,
                 statement,
             } => {
-                while self.evaluate_expr(&condition)?.is_truthy() {
+                while self.evaluate_expr(&condition)?.try_borrow()?.is_truthy() {
                     if let Some(exec_info) = self.execute(statement.as_ref().clone())? {
                         if exec_info.loop_break {
                             break;
@@ -207,9 +209,10 @@ impl Interpreter {
             Stmt::Function { name, params, body } => {
                 let function_env = Rc::new(RefCell::new(self.environment.borrow().clone()));
                 let callable = Rc::new(CallableObject::new(params, body, function_env));
-                self.environment
-                    .try_borrow_mut()?
-                    .define(name.lexeme.clone(), RuntimeValue::Callable(callable));
+                self.environment.try_borrow_mut()?.define(
+                    name.lexeme.clone(),
+                    Rc::new(RefCell::new(RuntimeValue::Callable(callable))),
+                );
                 Ok(None)
             }
             Stmt::Return { expr, keyword } => {
@@ -227,29 +230,31 @@ impl Interpreter {
                 name,
                 methods: _methods,
             } => {
-                self.environment
-                    .try_borrow_mut()?
-                    .define(name.lexeme.clone(), RuntimeValue::Null);
+                self.environment.try_borrow_mut()?.define(
+                    name.lexeme.clone(),
+                    Rc::new(RefCell::new(RuntimeValue::Null)),
+                );
                 let klass = LoxClass::new(name.lexeme.clone());
-                self.environment
-                    .try_borrow_mut()?
-                    .assign(&name.lexeme, RuntimeValue::Callable(Rc::new(klass)))?;
+                self.environment.try_borrow_mut()?.assign(
+                    &name.lexeme,
+                    Rc::new(RefCell::new(RuntimeValue::Callable(Rc::new(klass)))),
+                )?;
                 Ok(None)
             }
         }
     }
 
-    fn evaluate_expr(&mut self, expr: &Expr) -> anyhow::Result<RuntimeValue> {
+    fn evaluate_expr(&mut self, expr: &Expr) -> anyhow::Result<Rc<RefCell<RuntimeValue>>> {
         match expr {
             Expr::Binary {
                 left,
                 operator,
                 right,
             } => {
-                let left_value = self.evaluate_expr(left)?;
-                let right_value = self.evaluate_expr(right)?;
+                let left_value = self.evaluate_expr(left)?.borrow().clone();
+                let right_value = self.evaluate_expr(right)?.borrow().clone();
 
-                match operator.token_type {
+                let v: anyhow::Result<RuntimeValue> = match operator.token_type {
                     TokenType::Minus => Ok(RuntimeValue::Number(
                         TryInto::<f64>::try_into(left_value)?
                             - TryInto::<f64>::try_into(right_value)?,
@@ -302,12 +307,13 @@ impl Interpreter {
                     _ => {
                         bail!("Invalid token type {:?}", operator);
                     }
-                }
+                };
+                Ok(Rc::new(RefCell::new(v?)))
             }
             Expr::Unary { operator, right } => {
-                let sub_expr = self.evaluate_expr(right)?;
+                let sub_expr = self.evaluate_expr(right)?.borrow().clone();
 
-                match (&operator.token_type, &sub_expr) {
+                let v: anyhow::Result<RuntimeValue> = match (&operator.token_type, &sub_expr) {
                     (TokenType::Minus, RuntimeValue::Number(number)) => {
                         Ok(RuntimeValue::Number(-number))
                     }
@@ -328,9 +334,10 @@ impl Interpreter {
                             sub_expr
                         );
                     }
-                }
+                };
+                Ok(Rc::new(RefCell::new(v?)))
             }
-            Expr::Literal(value) => Ok(RuntimeValue::from(value)),
+            Expr::Literal(value) => Ok(Rc::new(RefCell::new(RuntimeValue::from(value)))),
             // To evaluate the grouping expression itself, we recursively evaluate that subexpression and return it.
             Expr::Grouping { expression } => self.evaluate_expr(expression),
             Expr::Variable { name } => self.visit_expr_var(name).context(format!(
@@ -363,9 +370,9 @@ impl Interpreter {
             } => {
                 let left_value = self.evaluate_expr(left)?;
                 match operator.token_type {
-                    TokenType::And if !left_value.is_truthy() => Ok(left_value),
+                    TokenType::And if !left_value.try_borrow()?.is_truthy() => Ok(left_value),
                     TokenType::And => self.evaluate_expr(right),
-                    TokenType::Or if left_value.is_truthy() => Ok(left_value),
+                    TokenType::Or if left_value.try_borrow()?.is_truthy() => Ok(left_value),
                     TokenType::Or => self.evaluate_expr(right),
                     _ => bail!("invalid operator {:?}", operator),
                 }
@@ -375,7 +382,7 @@ impl Interpreter {
                 paren,
                 arguments,
             } => {
-                let callee = self.evaluate_expr(callee)?;
+                let callee = self.evaluate_expr(callee)?.try_borrow()?.clone();
 
                 let lox_arguments = arguments
                     .iter()
@@ -394,7 +401,7 @@ impl Interpreter {
         }
     }
 
-    fn visit_expr_var(&mut self, name: &Token) -> anyhow::Result<RuntimeValue> {
+    fn visit_expr_var(&mut self, name: &Token) -> anyhow::Result<Rc<RefCell<RuntimeValue>>> {
         let key = ExprNameWithLine {
             name: name.lexeme.clone(),
             line: name.line,
@@ -418,13 +425,18 @@ impl Interpreter {
             }
             None => self
                 .globals
-                .borrow()
+                .borrow_mut()
                 .get(&name.lexeme)
                 .context(format!("Undefined variable in globals '{}'.", name.lexeme)),
         }
     }
 
-    fn assign_at(&mut self, name: &Token, value: RuntimeValue, depth: usize) -> anyhow::Result<()> {
+    fn assign_at(
+        &mut self,
+        name: &Token,
+        value: Rc<RefCell<RuntimeValue>>,
+        depth: usize,
+    ) -> anyhow::Result<()> {
         let env = if depth == 0 {
             self.environment.clone()
         } else {

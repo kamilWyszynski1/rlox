@@ -1,3 +1,4 @@
+#![allow(warnings)]
 #![feature(let_chains)]
 extern crate core;
 extern crate lazy_static;
