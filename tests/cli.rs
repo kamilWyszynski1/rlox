@@ -9,7 +9,7 @@ macro_rules! test_set {
             cmd.arg("-f").arg($path).arg("--verbose").arg("false");
             cmd.assert()
                 .success()
-                .stdout(predicate::str::is_match($result)?);
+                .stdout(predicate::str::is_match(format!("{}$", $result))?);
             Ok(())
         }
     };
@@ -52,7 +52,8 @@ outer b
 global c
 global a
 global b
-global c"#
+global c
+"#
 );
 
 test_set_error!(
@@ -84,6 +85,10 @@ test_set!(
     "examples/class.lox",
     r#"DevonshireCream
 DevonshireCream instance
+1
+2
+100
+100
 "#
 );
 

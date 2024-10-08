@@ -185,6 +185,23 @@ impl Resolver {
                     self.resolve_expr(arg)?;
                 }
             }
+
+            Expr::Get { object, name } => {
+                // Since properties are looked up dynamically, they don’t get resolved.
+                // During resolution, we recurse only into the expression to the left of the dot. The actual property access happens in the interpreter.
+                self.resolve_expr(object)?;
+            }
+
+            Expr::Set {
+                object,
+                name: _,
+                value,
+            } => {
+                // Again, like Expr::Get, the property itself is dynamically evaluated, so there’s nothing to resolve there.
+                // All we need to do is recurse into the two subexpressions of Expr::Set, the object whose property is being set, and the value it’s being set to.
+                self.resolve_expr(object)?;
+                self.resolve_expr(value)?;
+            }
         }
         Ok(())
     }

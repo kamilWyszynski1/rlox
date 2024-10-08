@@ -50,7 +50,7 @@ use anyhow::{bail, Context};
 // block          → "{" declaration* "}" ;
 //
 // expression     → assignment ;
-// assignment     → IDENTIFIER "=" assignment
+// assignment     → ( call "." )? IDENTIFIER "=" assignment
 //                | logic_or ;
 // logic_or       → logic_and ( "or" logic_and )* ;
 // logic_and      → equality ( "and" equality )* ;
@@ -59,7 +59,7 @@ use anyhow::{bail, Context};
 // term           → factor ( ( "-" | "+" ) factor )* ;
 // factor         → unary ( ( "/" | "*" ) unary )* ;
 // unary          → ( "!" | "-" ) unary | call ;
-// call           → primary ( "(" arguments? ")" )* ;
+// call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
 // arguments      → expression ( "," expression )* ;
 // primary        → "true" | "false" | "nil"
 //                | NUMBER | STRING
@@ -367,13 +367,17 @@ impl Parser {
                     .context("cannot find previous token after '='")?;
                 let value = self.assignment()?;
 
-                if let Variable { name } = expr {
-                    Ok(Assign {
+                match expr {
+                    Expr::Variable { name } => Ok(Assign {
                         name,
                         value: Box::new(value),
-                    })
-                } else {
-                    bail!("Invalid assignment target {:?}", &equals);
+                    }),
+                    Expr::Get { object, name } => Ok(Expr::Set {
+                        object,
+                        name,
+                        value: Box::new(value),
+                    }),
+                    _ => bail!("Invalid assignment target {:?}", &equals),
                 }
             }
             None => Ok(expr),
@@ -487,13 +491,26 @@ impl Parser {
         self.call()
     }
 
+    /// Dot syntax should support something like that "egg.scramble(3).with(cheddar)".
     fn call(&mut self) -> anyhow::Result<Expr> {
         let mut expr = self.primary()?;
 
         loop {
-            match self.match_token_types(&[TokenType::LeftParen]) {
+            match self.match_token_types(&[TokenType::LeftParen, TokenType::Dot]) {
                 None => break,
-                Some(_) => expr = self.finish_call(expr)?,
+                Some(token) => match token.token_type {
+                    TokenType::LeftParen => expr = self.finish_call(expr)?,
+                    TokenType::Dot => {
+                        let name = self
+                            .consume(Identifier)
+                            .context("Expect property name after '.'.")?;
+                        expr = Expr::Get {
+                            object: Box::new(expr.clone()),
+                            name,
+                        };
+                    }
+                    _ => unreachable!(),
+                },
             }
         }
         Ok(expr)

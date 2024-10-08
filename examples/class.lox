@@ -7,3 +7,14 @@ class DevonshireCream {
 print DevonshireCream; // Prints "DevonshireCream".
 var cream = DevonshireCream();
 print cream;
+cream.foo = 1;
+print cream.foo;
+cream.foo = 2;
+print cream.foo;
+
+var a = 100;
+cream.foo = a;
+print cream.foo;
+
+a = 200;
+print cream.foo;

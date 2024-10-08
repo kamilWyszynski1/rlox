@@ -398,6 +398,39 @@ impl Interpreter {
                     bail!("only callable can be invoked")
                 }
             }
+            Expr::Get { object, name } => {
+                let evaluated = self.evaluate_expr(object)?;
+                let x = if let RuntimeValue::Instance(instance) = evaluated.try_borrow()?.clone() {
+                    let v = instance
+                        .get(&name.lexeme)
+                        .context(format!("Undefined property '{}'.", name.lexeme))?
+                        .clone();
+                    Ok(Rc::new(RefCell::new(v)))
+                } else {
+                    bail!("Only instances have properties.")
+                };
+                x
+            }
+
+            Expr::Set {
+                object,
+                name,
+                value,
+            } => {
+                let evaluated = self.evaluate_expr(object)?;
+                let mut borrowed = evaluated.try_borrow_mut()?;
+                let x = if let RuntimeValue::Instance(mut instance) = borrowed.clone() {
+                    let value = self.evaluate_expr(value)?;
+
+                    instance.set(name.lexeme.clone(), value.try_borrow()?.clone());
+                    *borrowed = RuntimeValue::Instance(instance);
+
+                    Ok(value)
+                } else {
+                    bail!("Only instances have properties.")
+                };
+                x
+            }
         }
     }
 

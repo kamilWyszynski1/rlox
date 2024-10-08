@@ -76,10 +76,22 @@ pub enum Expr {
         operator: Token,
         right: Box<Expr>,
     },
+    // Setter for class' instance properties.
+    Set {
+        object: Box<Expr>,
+        name: Token,
+        value: Box<Expr>,
+    },
+    /// Function's call.
     Call {
         callee: Box<Expr>,
         paren: Token,
         arguments: Vec<Expr>,
+    },
+    /// Class' instance property access with "." syntax.
+    Get {
+        object: Box<Expr>,
+        name: Token,
     },
 }
 
@@ -124,6 +136,17 @@ impl Expr {
                 paren,
                 arguments,
             } => format!("call {}", callee.format_to_string()),
+
+            Expr::Get { object, name } => {
+                format!("(get {} {:?})", object, name)
+            }
+            Expr::Set {
+                object,
+                name,
+                value,
+            } => {
+                format!("(set {} {:?} {})", object, name, value)
+            }
         }
     }
 }
