@@ -105,6 +105,13 @@ impl Resolver {
                     self.resolve_stmt(else_branch)?;
                 }
             }
+            Stmt::Class {
+                name,
+                methods: _methods,
+            } => {
+                self.declare(&name, false)?;
+                self.define(&name, false)?;
+            }
         }
         Ok(())
     }

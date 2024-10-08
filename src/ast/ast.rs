@@ -20,10 +20,10 @@ pub enum Stmt {
     Block {
         statements: Vec<Stmt>,
     },
-    // Class {
-    //     name: Token,
-    //     methods: Vec<Stmt>, // list of functions
-    // },
+    Class {
+        name: Token,
+        methods: Vec<Stmt>, // list of functions
+    },
     If {
         condition: Expr,
         then_branch: Box<Stmt>,

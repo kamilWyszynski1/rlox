@@ -1,4 +1,4 @@
-use crate::interpreter::interpreter::RuntimeValue;
+use crate::interpreter::runtime::RuntimeValue;
 use anyhow::bail;
 use std::cell::RefCell;
 use std::collections::HashMap;

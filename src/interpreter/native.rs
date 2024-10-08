@@ -1,4 +1,6 @@
-use crate::interpreter::interpreter::{Interpreter, LoxCallable, RuntimeValue};
+use crate::interpreter::interpreter::{Interpreter, LoxCallable};
+use crate::interpreter::runtime::RuntimeValue;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone)]
 pub struct ClockCaller {}
@@ -6,6 +8,12 @@ pub struct ClockCaller {}
 impl ClockCaller {
     pub fn new() -> Self {
         Self {}
+    }
+}
+
+impl Display for ClockCaller {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "clock")
     }
 }
 

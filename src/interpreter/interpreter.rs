@@ -1,132 +1,22 @@
-use crate::ast::ast::{Expr, LiteralValue, Stmt};
+use crate::ast::ast::{Expr, Stmt};
+use crate::interpreter::class::LoxClass;
 use crate::interpreter::environment::Environment;
 use crate::interpreter::native::ClockCaller;
+use crate::interpreter::runtime::RuntimeValue;
 use crate::representation::token::{Token, TokenType};
-use anyhow::{anyhow, bail, Context};
+use anyhow::{bail, Context};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
 
-pub trait LoxCallable: Debug {
+pub trait LoxCallable: Debug + Display {
     fn call(
         &self,
         interpreter: &mut Interpreter,
         arguments: Vec<RuntimeValue>,
     ) -> anyhow::Result<RuntimeValue>;
     fn arity(&self) -> usize;
-}
-
-#[derive(Clone)]
-pub enum RuntimeValue {
-    Bool(bool),
-    Null,
-    Number(f64),
-    String(String),
-    Callable(Rc<dyn LoxCallable>),
-}
-
-impl RuntimeValue {
-    /// Lox follows Ruby’s simple rule: false and nil are falsey, and everything else is truthy.
-    fn is_truthy(&self) -> bool {
-        match self {
-            RuntimeValue::Bool(true)
-            | RuntimeValue::Number(_)
-            | RuntimeValue::String(_)
-            | RuntimeValue::Callable(_) => true,
-            RuntimeValue::Bool(false) | RuntimeValue::Null => false,
-        }
-    }
-}
-
-impl PartialEq for RuntimeValue {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (RuntimeValue::Bool(lhs), RuntimeValue::Bool(rhs)) => lhs == rhs,
-            (RuntimeValue::Null, RuntimeValue::Null) => true,
-            (RuntimeValue::Number(lhs), RuntimeValue::Number(rhs)) => lhs == rhs,
-            (RuntimeValue::String(lhs), RuntimeValue::String(rhs)) => lhs == rhs,
-            _ => false,
-        }
-    }
-}
-
-impl Debug for RuntimeValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let str = match self {
-            RuntimeValue::Bool(b) => b.to_string(),
-            RuntimeValue::Null => "null".to_string(),
-            RuntimeValue::Number(n) => n.to_string(),
-            RuntimeValue::String(s) => s.clone(),
-            RuntimeValue::Callable(_) => "callable".to_string(),
-        };
-        write!(f, "{}", str)
-    }
-}
-
-impl Display for RuntimeValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let str = match self {
-            RuntimeValue::Bool(b) => b.to_string(),
-            RuntimeValue::Null => "null".to_string(),
-            RuntimeValue::Number(n) => n.to_string(),
-            RuntimeValue::String(s) => s.clone(),
-            RuntimeValue::Callable(_) => "callable".to_string(),
-        };
-        write!(f, "{}", str)
-    }
-}
-
-impl From<bool> for RuntimeValue {
-    fn from(value: bool) -> Self {
-        RuntimeValue::Bool(value)
-    }
-}
-
-impl From<f64> for RuntimeValue {
-    fn from(value: f64) -> Self {
-        RuntimeValue::Number(value)
-    }
-}
-
-impl TryInto<f64> for RuntimeValue {
-    type Error = anyhow::Error;
-
-    fn try_into(self) -> Result<f64, Self::Error> {
-        match self {
-            RuntimeValue::Bool(_) => bail!("Cannot convert runtime value (Bool) to number"),
-            RuntimeValue::Null => bail!("Cannot convert runtime value (Null) to number"),
-            RuntimeValue::Number(number) => Ok(number),
-            RuntimeValue::String(string) => string
-                .parse()
-                .map_err(|_| anyhow!("Cannot convert runtime value (String, {string}) to number")),
-            RuntimeValue::Callable(_) => bail!("Cannot convert runtime value (Callable) to number"),
-        }
-    }
-}
-
-impl From<String> for RuntimeValue {
-    fn from(value: String) -> Self {
-        RuntimeValue::String(value)
-    }
-}
-
-impl From<LiteralValue> for RuntimeValue {
-    fn from(value: LiteralValue) -> Self {
-        Self::from(&value)
-    }
-}
-
-impl From<&LiteralValue> for RuntimeValue {
-    fn from(value: &LiteralValue) -> Self {
-        match value {
-            LiteralValue::True => RuntimeValue::Bool(true),
-            LiteralValue::False => RuntimeValue::Bool(false),
-            LiteralValue::Null => RuntimeValue::Null,
-            LiteralValue::Number(n) => RuntimeValue::Number(*n),
-            LiteralValue::String(s) => RuntimeValue::String(s.clone()),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -143,6 +33,12 @@ impl CallableObject {
             body,
             closure,
         }
+    }
+}
+
+impl Display for CallableObject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "callable")
     }
 }
 
@@ -326,6 +222,19 @@ impl Interpreter {
                     loop_break: false,
                     function_return,
                 }))
+            }
+            Stmt::Class {
+                name,
+                methods: _methods,
+            } => {
+                self.environment
+                    .try_borrow_mut()?
+                    .define(name.lexeme.clone(), RuntimeValue::Null);
+                let klass = LoxClass::new(name.lexeme.clone());
+                self.environment
+                    .try_borrow_mut()?
+                    .assign(&name.lexeme, RuntimeValue::Callable(Rc::new(klass)))?;
+                Ok(None)
             }
         }
     }

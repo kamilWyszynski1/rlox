@@ -107,11 +107,31 @@ impl Parser {
             Some(token) => match token.token_type {
                 Var => self.var_declaration(),
                 Fun => self.fun(),
-                // Class => self.class_declaration(),
+                Class => self.class_declaration(),
                 _ => bail!("unsupported token type in declaration method"),
             },
             None => self.statement(),
         }
+    }
+
+    fn class_declaration(&mut self) -> anyhow::Result<Stmt> {
+        let name = self.consume(Identifier).context("Expect class name")?;
+        self.consume(LeftBrace).context("Expect '{'")?;
+
+        let mut methods = vec![];
+        loop {
+            match self.fun() {
+                Ok(method) => methods.push(method),
+                Err(err) => {
+                    if err.to_string().contains("Expect function name") {
+                        break;
+                    }
+                    bail!(err);
+                }
+            }
+        }
+        self.consume(RightBrace).context("Expect '}'")?;
+        Ok(Stmt::Class { name, methods })
     }
 
     fn fun(&mut self) -> anyhow::Result<Stmt> {

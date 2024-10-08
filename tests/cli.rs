@@ -79,6 +79,14 @@ test_set_error!(
     "Error: Variable b is never used"
 );
 
+test_set!(
+    simple_class_prints,
+    "examples/class.lox",
+    r#"DevonshireCream
+DevonshireCream instance
+"#
+);
+
 #[test]
 fn test_while_loop() -> anyhow::Result<()> {
     let mut cmd = Command::cargo_bin("rlox")?;
