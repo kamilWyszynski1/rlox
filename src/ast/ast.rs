@@ -82,6 +82,9 @@ pub enum Expr {
         name: Token,
         value: Box<Expr>,
     },
+    This {
+        keyword: Token,
+    },
     /// Function's call.
     Call {
         callee: Box<Expr>,
@@ -146,6 +149,9 @@ impl Expr {
                 value,
             } => {
                 format!("(set {} {:?} {})", object, name, value)
+            }
+            Expr::This { keyword } => {
+                format!("this {:?}", keyword)
             }
         }
     }

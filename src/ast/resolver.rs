@@ -1,7 +1,7 @@
 use crate::ast::ast::{Expr, Stmt};
 use crate::error::error::{ErrorType, RLoxError};
 use crate::interpreter::interpreter::Interpreter;
-use crate::representation::token::Token;
+use crate::representation::token::{Token, TokenType};
 use anyhow::{anyhow, bail, Context};
 use std::collections::{HashMap, VecDeque};
 
@@ -13,7 +13,7 @@ struct VariableInfo {
     token: Token,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 enum FunctionType {
     Function,
     Method,
@@ -32,11 +32,24 @@ impl FunctionType {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum ClassType {
+    None,
+    Class,
+}
+
+impl Default for ClassType {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 pub struct Resolver {
     interpreter: Interpreter,
     scopes: VecDeque<HashMap<String, VariableInfo>>,
 
     current_function: FunctionType,
+    current_class: ClassType,
 }
 
 impl Resolver {
@@ -45,6 +58,7 @@ impl Resolver {
             interpreter,
             scopes: VecDeque::new(),
             current_function: FunctionType::default(),
+            current_class: ClassType::default(),
         }
     }
 
@@ -129,9 +143,22 @@ impl Resolver {
                 }
             }
             Stmt::Class { name, methods } => {
+                let enclosing = self.current_class;
+                self.current_class = ClassType::Class;
+
                 self.declare(&name, false)?;
                 self.define(&name, false)?;
 
+                self.begin_scope();
+                self.scopes.front_mut().unwrap().insert(
+                    "this".to_string(),
+                    VariableInfo {
+                        token: Token::new(TokenType::This, "this".to_string(), 0, 0, 0, 0),
+                        is_used: true,
+                        is_defined: true,
+                        is_function_param: false,
+                    },
+                );
                 for method in methods {
                     if let Stmt::Function { name, params, body } = method {
                         self.resolve_function(params, body, FunctionType::Method)?;
@@ -139,6 +166,8 @@ impl Resolver {
                         bail!("Resolver: Class' method should be a function type")
                     }
                 }
+                self.end_scope()?;
+                self.current_class = enclosing;
             }
         }
         Ok(())
@@ -150,7 +179,7 @@ impl Resolver {
         body: &[Stmt],
         function_type: FunctionType,
     ) -> anyhow::Result<()> {
-        let enclosing_function = self.current_function.clone();
+        let enclosing_function = self.current_function;
         self.current_function = function_type;
 
         self.begin_scope();
@@ -239,6 +268,22 @@ impl Resolver {
                 // All we need to do is recurse into the two subexpressions of Expr::Set, the object whose property is being set, and the value it’s being set to.
                 self.resolve_expr(object)?;
                 self.resolve_expr(value)?;
+            }
+
+            Expr::This { keyword } => {
+                dbg!(&self.current_function);
+                if !matches!(self.current_class, ClassType::Class) {
+                    return Err(anyhow!(RLoxError {
+                        error: ErrorType::Resolve(
+                            "Can't use 'this' outside of a class.".to_string()
+                        ),
+                        line: keyword.line,
+                        column: keyword.column,
+                        start: keyword.start,
+                        end: keyword.end,
+                    }));
+                }
+                self.resolve_local(keyword)?;
             }
         }
         Ok(())

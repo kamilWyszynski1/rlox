@@ -1,9 +1,6 @@
 use crate::ast::ast::Expr::{Assign, Literal, Variable};
 use crate::ast::ast::{Expr, LiteralValue, Stmt};
-use crate::representation::token::TokenType::{
-    And, Break, Class, Else, Equal, For, Fun, Identifier, If, LeftBrace, LeftParen, Or, Print,
-    Return, RightBrace, RightParen, Semicolon, Var, While,
-};
+use crate::representation::token::TokenType::*;
 use crate::representation::token::{Token, TokenType};
 use anyhow::{bail, Context};
 
@@ -545,23 +542,26 @@ impl Parser {
         let expr = match self.peek() {
             None => bail!("unexpected end of file"),
             Some(token) => match &token.token_type {
-                TokenType::True => Literal(LiteralValue::True),
-                TokenType::False => Literal(LiteralValue::False),
-                TokenType::Nil => Literal(LiteralValue::Null),
-                TokenType::String(string) => Literal(LiteralValue::String(string.to_string())),
-                TokenType::Number(number) => Literal(LiteralValue::Number(*number)),
-                TokenType::Identifier => Variable {
+                True => Literal(LiteralValue::True),
+                False => Literal(LiteralValue::False),
+                Nil => Literal(LiteralValue::Null),
+                String(string) => Literal(LiteralValue::String(string.to_string())),
+                Number(number) => Literal(LiteralValue::Number(*number)),
+                Identifier => Variable {
                     name: token.clone(),
                 },
-                TokenType::LeftParen => {
+                LeftParen => {
                     self.current += 1; // consume
                     let expression = self.expression()?;
-                    self.consume(TokenType::RightParen)
+                    self.consume(RightParen)
                         .context("expected ')' after expression")?;
                     return Ok(Expr::Grouping {
                         expression: Box::new(expression),
                     });
                 }
+                This => Expr::This {
+                    keyword: token.clone(),
+                },
                 _ => bail!("expression expected, {:?}", token),
             },
         };

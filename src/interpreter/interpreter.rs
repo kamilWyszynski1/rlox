@@ -1,5 +1,5 @@
 use crate::ast::ast::{Expr, Stmt};
-use crate::interpreter::class::LoxClass;
+use crate::interpreter::class::{LoxClass, LoxInstance};
 use crate::interpreter::environment::Environment;
 use crate::interpreter::native::ClockCaller;
 use crate::interpreter::runtime::RuntimeValue;
@@ -32,6 +32,18 @@ impl CallableObject {
             parameters,
             body,
             closure,
+        }
+    }
+
+    pub fn bind(&self, instance: LoxInstance) -> Self {
+        let mut env = Environment::new(self.closure.clone());
+        env.define(
+            "this".to_string(),
+            Rc::new(RefCell::new(RuntimeValue::Instance(instance))),
+        );
+        Self {
+            closure: Rc::new(RefCell::new(env)),
+            ..self.clone()
         }
     }
 }
@@ -232,13 +244,12 @@ impl Interpreter {
                     Rc::new(RefCell::new(RuntimeValue::Null)),
                 );
 
-                let mut class_methods: HashMap<String, RuntimeValue> = HashMap::new();
+                let mut class_methods: HashMap<String, CallableObject> = HashMap::new();
                 for method in methods {
                     let method_env = Rc::new(RefCell::new(self.environment.borrow().clone()));
                     if let Stmt::Function { name, params, body } = method {
                         let function = CallableObject::new(params, body, method_env);
-                        class_methods
-                            .insert(name.lexeme, RuntimeValue::Callable(Rc::new(function)));
+                        class_methods.insert(name.lexeme, function);
                     } else {
                         bail!("Interpreter: Class' method should be a function type")
                     }
@@ -441,6 +452,8 @@ impl Interpreter {
                 };
                 x
             }
+
+            Expr::This { keyword } => self.visit_expr_var(keyword),
         }
     }
 

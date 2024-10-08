@@ -1,4 +1,4 @@
-use crate::interpreter::interpreter::{Interpreter, LoxCallable};
+use crate::interpreter::interpreter::{CallableObject, Interpreter, LoxCallable};
 use crate::interpreter::runtime::RuntimeValue;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -6,51 +6,20 @@ use std::fmt::Display;
 use std::rc::Rc;
 
 #[derive(Debug, Clone)]
-pub struct LoxInstance {
-    klass: LoxClass,
-    fields: HashMap<String, RuntimeValue>,
-}
-
-impl LoxInstance {
-    fn new(klass: LoxClass) -> LoxInstance {
-        LoxInstance {
-            klass,
-            fields: HashMap::new(),
-        }
-    }
-
-    pub fn get(&self, name: &str) -> Option<&RuntimeValue> {
-        self.fields
-            .get(name)
-            .or_else(|| self.klass.find_method(name))
-    }
-
-    pub fn set(&mut self, name: String, value: RuntimeValue) {
-        self.fields.insert(name, value);
-    }
-}
-
-impl Display for LoxInstance {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} instance", self.klass)
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct LoxClass {
     pub(crate) name: String,
-    methods: HashMap<String, RuntimeValue>, // stores RuntimeValue::Callable objects
+    methods: HashMap<String, CallableObject>, // stores RuntimeValue::Callable objects
 }
 
 impl LoxClass {
-    pub fn new(name: String, class_methods: HashMap<String, RuntimeValue>) -> Self {
+    pub fn new(name: String, class_methods: HashMap<String, CallableObject>) -> Self {
         Self {
             name,
             methods: class_methods,
         }
     }
 
-    fn find_method(&self, name: &str) -> Option<&RuntimeValue> {
+    fn find_method(&self, name: &str) -> Option<&CallableObject> {
         self.methods.get(name)
     }
 }
@@ -74,5 +43,44 @@ impl LoxCallable for LoxClass {
 
     fn arity(&self) -> usize {
         0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LoxInstance {
+    klass: LoxClass,
+    fields: HashMap<String, RuntimeValue>,
+}
+
+impl LoxInstance {
+    fn new(klass: LoxClass) -> LoxInstance {
+        LoxInstance {
+            klass,
+            fields: HashMap::new(),
+        }
+    }
+
+    pub fn get(&self, name: &str) -> Option<RuntimeValue> {
+        if let Some(field) = self.fields.get(name) {
+            return Some(field.clone());
+        }
+
+        if let Some(method) = self.klass.find_method(name) {
+            let copy = self.clone();
+            let binded = method.bind(copy);
+            let result = RuntimeValue::Callable(Rc::new(binded));
+            return Some(result);
+        }
+        None
+    }
+
+    pub fn set(&mut self, name: String, value: RuntimeValue) {
+        self.fields.insert(name, value);
+    }
+}
+
+impl Display for LoxInstance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} instance", self.klass)
     }
 }

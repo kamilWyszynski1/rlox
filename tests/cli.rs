@@ -90,7 +90,15 @@ DevonshireCream instance
 100
 100
 Crunch crunch crunch!
+The German chocolate cake is delicious!
+Thing instance
 "#
+);
+
+test_set_error!(
+    invalid_this_usage,
+    "examples/invalid_this_usage.lox",
+    "Error: Can't use 'this' outside of a class."
 );
 
 #[test]
