@@ -20,7 +20,7 @@ pub trait LoxCallable: Debug + Display {
 }
 
 #[derive(Debug, Clone)]
-struct CallableObject {
+pub struct CallableObject {
     closure: Rc<RefCell<Environment>>,
     parameters: Vec<Token>,
     body: Vec<Stmt>,
@@ -226,15 +226,25 @@ impl Interpreter {
                     function_return,
                 }))
             }
-            Stmt::Class {
-                name,
-                methods: _methods,
-            } => {
+            Stmt::Class { name, methods } => {
                 self.environment.try_borrow_mut()?.define(
                     name.lexeme.clone(),
                     Rc::new(RefCell::new(RuntimeValue::Null)),
                 );
-                let klass = LoxClass::new(name.lexeme.clone());
+
+                let mut class_methods: HashMap<String, RuntimeValue> = HashMap::new();
+                for method in methods {
+                    let method_env = Rc::new(RefCell::new(self.environment.borrow().clone()));
+                    if let Stmt::Function { name, params, body } = method {
+                        let function = CallableObject::new(params, body, method_env);
+                        class_methods
+                            .insert(name.lexeme, RuntimeValue::Callable(Rc::new(function)));
+                    } else {
+                        bail!("Interpreter: Class' method should be a function type")
+                    }
+                }
+
+                let klass = LoxClass::new(name.lexeme.clone(), class_methods);
                 self.environment.try_borrow_mut()?.assign(
                     &name.lexeme,
                     Rc::new(RefCell::new(RuntimeValue::Callable(Rc::new(klass)))),

@@ -18,3 +18,11 @@ print cream.foo;
 
 a = 200;
 print cream.foo;
+
+class Bacon {
+  eat() {
+    print "Crunch crunch crunch!";
+  }
+}
+
+Bacon().eat(); // Prints "Crunch crunch crunch!".

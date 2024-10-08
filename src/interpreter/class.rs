@@ -1,7 +1,7 @@
 use crate::interpreter::interpreter::{Interpreter, LoxCallable};
 use crate::interpreter::runtime::RuntimeValue;
-use std::collections::HashMap;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::rc::Rc;
 
@@ -20,7 +20,9 @@ impl LoxInstance {
     }
 
     pub fn get(&self, name: &str) -> Option<&RuntimeValue> {
-        self.fields.get(name)
+        self.fields
+            .get(name)
+            .or_else(|| self.klass.find_method(name))
     }
 
     pub fn set(&mut self, name: String, value: RuntimeValue) {
@@ -37,11 +39,19 @@ impl Display for LoxInstance {
 #[derive(Debug, Clone)]
 pub struct LoxClass {
     pub(crate) name: String,
+    methods: HashMap<String, RuntimeValue>, // stores RuntimeValue::Callable objects
 }
 
 impl LoxClass {
-    pub fn new(name: String) -> Self {
-        Self { name }
+    pub fn new(name: String, class_methods: HashMap<String, RuntimeValue>) -> Self {
+        Self {
+            name,
+            methods: class_methods,
+        }
+    }
+
+    fn find_method(&self, name: &str) -> Option<&RuntimeValue> {
+        self.methods.get(name)
     }
 }
 

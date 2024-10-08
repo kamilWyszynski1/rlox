@@ -89,6 +89,7 @@ DevonshireCream instance
 2
 100
 100
+Crunch crunch crunch!
 "#
 );
 

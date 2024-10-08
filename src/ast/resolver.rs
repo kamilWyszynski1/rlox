@@ -2,7 +2,7 @@ use crate::ast::ast::{Expr, Stmt};
 use crate::error::error::{ErrorType, RLoxError};
 use crate::interpreter::interpreter::Interpreter;
 use crate::representation::token::Token;
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, bail, Context};
 use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug, Clone)]
@@ -13,11 +13,30 @@ struct VariableInfo {
     token: Token,
 }
 
+#[derive(Debug, Clone)]
+enum FunctionType {
+    Function,
+    Method,
+    None,
+}
+
+impl Default for FunctionType {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl FunctionType {
+    fn is_function_like(&self) -> bool {
+        matches!(self, Self::Function | Self::Method)
+    }
+}
+
 pub struct Resolver {
     interpreter: Interpreter,
     scopes: VecDeque<HashMap<String, VariableInfo>>,
 
-    is_function_body: bool,
+    current_function: FunctionType,
 }
 
 impl Resolver {
@@ -25,7 +44,7 @@ impl Resolver {
         Self {
             interpreter,
             scopes: VecDeque::new(),
-            is_function_body: false,
+            current_function: FunctionType::default(),
         }
     }
 
@@ -45,17 +64,21 @@ impl Resolver {
         match stmt {
             Stmt::Expression { expression } => self.resolve_expr(&expression)?,
             Stmt::Function { name, params, body } => {
-                let reset = if !self.is_function_body { true } else { false };
-                self.is_function_body = true;
+                // let reset = if !self.current_function.is_function_like() {
+                //     true
+                // } else {
+                //     false
+                // };
+
                 self.declare(&name, false)?;
                 self.define(&name, false)?;
 
-                self.resolve_function(params, body)?;
-                if reset {
-                    // reset only if it's first-level function call, we should not reset
-                    // variable in case of closures
-                    self.is_function_body = false;
-                }
+                self.resolve_function(params, body, FunctionType::Function)?;
+                // if reset {
+                //     // reset only if it's first-level function call, we should not reset
+                //     // variable in case of closures
+                //     self.current_function = FunctionType::None;
+                // }
             }
             Stmt::Print { expression } => self.resolve_expr(&expression)?,
             Stmt::Var { name, initializer } => {
@@ -81,7 +104,7 @@ impl Resolver {
             }
             Stmt::Break => {}
             Stmt::Return { expr, keyword } => {
-                if !self.is_function_body {
+                if !self.current_function.is_function_like() {
                     return Err(anyhow!(RLoxError {
                         error: ErrorType::Resolve("Can't return from top-level code.".to_string()),
                         line: keyword.line,
@@ -105,18 +128,31 @@ impl Resolver {
                     self.resolve_stmt(else_branch)?;
                 }
             }
-            Stmt::Class {
-                name,
-                methods: _methods,
-            } => {
+            Stmt::Class { name, methods } => {
                 self.declare(&name, false)?;
                 self.define(&name, false)?;
+
+                for method in methods {
+                    if let Stmt::Function { name, params, body } = method {
+                        self.resolve_function(params, body, FunctionType::Method)?;
+                    } else {
+                        bail!("Resolver: Class' method should be a function type")
+                    }
+                }
             }
         }
         Ok(())
     }
 
-    fn resolve_function(&mut self, params: &[Token], body: &[Stmt]) -> anyhow::Result<()> {
+    fn resolve_function(
+        &mut self,
+        params: &[Token],
+        body: &[Stmt],
+        function_type: FunctionType,
+    ) -> anyhow::Result<()> {
+        let enclosing_function = self.current_function.clone();
+        self.current_function = function_type;
+
         self.begin_scope();
         for param in params {
             self.declare(&param, true)?;
@@ -124,6 +160,8 @@ impl Resolver {
         }
         self._resolve(body)?;
         self.end_scope()?;
+
+        self.current_function = enclosing_function;
         Ok(())
     }
 
