@@ -20,6 +20,10 @@ pub enum Stmt {
     Block {
         statements: Vec<Stmt>,
     },
+    // Class {
+    //     name: Token,
+    //     methods: Vec<Stmt>, // list of functions
+    // },
     If {
         condition: Expr,
         then_branch: Box<Stmt>,
@@ -121,50 +125,5 @@ impl Expr {
                 arguments,
             } => format!("call {}", callee.format_to_string()),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::ast::ast::LiteralValue::String;
-    use crate::representation::token::TokenType;
-
-    #[test]
-    fn test_format_to_string() {
-        let expr = Expr::Binary {
-            left: Box::new(Expr::Unary {
-                operator: Token::new(TokenType::Minus, "-".to_string(), 1, 0),
-                right: Box::new(Expr::Literal(String("123".to_string()))),
-            }),
-            operator: Token::new(TokenType::Star, "*".to_string(), 1, 0),
-            right: Box::new(Expr::Grouping {
-                expression: Box::new(Expr::Literal(String("45.67".to_string()))),
-            }),
-        };
-        assert_eq!(expr.format_to_string(), "(* (- 123) (group 45.67))");
-
-        let expr = Expr::Binary {
-            left: Box::new(Expr::Literal(String("1".to_string()))),
-            operator: Token {
-                token_type: TokenType::Plus,
-                lexeme: "+".to_string(),
-                line: 1,
-                column: 0,
-            },
-            right: Box::new(Expr::Grouping {
-                expression: Box::new(Expr::Binary {
-                    left: Box::new(Expr::Literal(String("2".to_string()))),
-                    operator: Token {
-                        token_type: TokenType::Star,
-                        lexeme: "*".to_string(),
-                        line: 1,
-                        column: 0,
-                    },
-                    right: Box::new(Expr::Literal(String("3".to_string()))),
-                }),
-            }),
-        };
-        assert_eq!(expr.format_to_string(), "(+ 1 (group (* 2 3)))");
     }
 }

@@ -2,21 +2,40 @@
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Token {
     pub(crate) token_type: TokenType,
     pub lexeme: String,
     pub(crate) line: usize,
     pub(crate) column: usize,
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+}
+
+impl PartialEq for Token {
+    fn eq(&self, other: &Self) -> bool {
+        self.token_type == other.token_type
+            && self.lexeme == other.lexeme
+            && self.line == other.line
+    }
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, lexeme: String, line: usize, column: usize) -> Self {
+    pub fn new(
+        token_type: TokenType,
+        lexeme: String,
+        line: usize,
+        column: usize,
+        start: usize,
+        end: usize,
+    ) -> Self {
         Self {
             token_type,
             lexeme,
             line,
             column,
+            start,
+            end,
         }
     }
 }

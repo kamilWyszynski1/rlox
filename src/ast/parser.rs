@@ -1,8 +1,8 @@
 use crate::ast::ast::Expr::{Assign, Literal, Variable};
 use crate::ast::ast::{Expr, LiteralValue, Stmt};
 use crate::representation::token::TokenType::{
-    And, Break, Else, Equal, For, Fun, Identifier, If, LeftBrace, LeftParen, Or, Print, Return,
-    RightBrace, RightParen, Semicolon, Var, While,
+    And, Break, Class, Else, Equal, For, Fun, Identifier, If, LeftBrace, LeftParen, Or, Print,
+    Return, RightBrace, RightParen, Semicolon, Var, While,
 };
 use crate::representation::token::{Token, TokenType};
 use anyhow::{bail, Context};
@@ -11,9 +11,12 @@ use anyhow::{bail, Context};
 //
 // program        → declaration* EOF ;
 //
-// declaration    → funDecl
+// declaration    → classDecl
+//                | funDecl
 //                | varDecl
 //                | statement ;
+//
+// classDecl      → "class" IDENTIFIER "{" function* "}" ;
 //
 // funDecl        → "fun" function ;
 // function       → IDENTIFIER "(" parameters? ")" block ;
@@ -99,11 +102,12 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> anyhow::Result<Stmt> {
-        match self.match_token_types(&[Var, Fun]) {
+        match self.match_token_types(&[Var, Fun, Class]) {
             // TODO: synchronize?
             Some(token) => match token.token_type {
                 Var => self.var_declaration(),
                 Fun => self.fun(),
+                // Class => self.class_declaration(),
                 _ => bail!("unsupported token type in declaration method"),
             },
             None => self.statement(),

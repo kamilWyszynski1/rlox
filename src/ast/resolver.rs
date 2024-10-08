@@ -1,7 +1,8 @@
 use crate::ast::ast::{Expr, Stmt};
+use crate::error::error::{ErrorType, RLoxError};
 use crate::interpreter::interpreter::Interpreter;
 use crate::representation::token::Token;
-use anyhow::{bail, Context};
+use anyhow::{anyhow, Context};
 use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug, Clone)]
@@ -9,6 +10,7 @@ struct VariableInfo {
     is_defined: bool,
     is_used: bool,
     is_function_param: bool,
+    token: Token,
 }
 
 pub struct Resolver {
@@ -80,8 +82,13 @@ impl Resolver {
             Stmt::Break => {}
             Stmt::Return { expr, keyword } => {
                 if !self.is_function_body {
-                    println!("{} {}", keyword.line, keyword.column);
-                    bail!("Can't return from top-level code.")
+                    return Err(anyhow!(RLoxError {
+                        error: ErrorType::Resolve("Can't return from top-level code.".to_string()),
+                        line: keyword.line,
+                        column: keyword.column,
+                        start: keyword.start,
+                        end: keyword.end,
+                    }));
                 }
                 if let Some(expr) = expr {
                     self.resolve_expr(&expr)?;
@@ -133,7 +140,16 @@ impl Resolver {
                     if let Some(scope) = self.scopes.front() {
                         if let Some(info) = scope.get(&name.lexeme) {
                             if !info.is_defined {
-                                bail!("Can't read local variable in its own initializer.")
+                                return Err(anyhow!(RLoxError {
+                                    error: ErrorType::Resolve(
+                                        "Can't read local variable in its own initializer."
+                                            .to_string()
+                                    ),
+                                    line: name.line,
+                                    column: name.column,
+                                    start: name.start,
+                                    end: name.end,
+                                }));
                             }
                         }
                     }
@@ -193,7 +209,13 @@ impl Resolver {
             // For now, it will only work for function's local variables.
             for (name, info) in scope {
                 if !info.is_used && !info.is_function_param && !name.starts_with('_') {
-                    bail!("Variable {name} is never used")
+                    return Err(anyhow!(RLoxError {
+                        error: ErrorType::Resolve(format!("Variable {name} is never used")),
+                        line: info.token.line,
+                        column: info.token.column,
+                        start: info.token.start,
+                        end: info.token.end,
+                    }));
                 }
             }
         }
@@ -206,7 +228,15 @@ impl Resolver {
         }
         let scope = self.scopes.front_mut().context("no front scope")?;
         if scope.contains_key(&name.lexeme) {
-            bail!("Already a variable with this name in this scope.")
+            return Err(anyhow!(RLoxError {
+                error: ErrorType::Resolve(
+                    "Already a variable with this name in this scope.".to_string()
+                ),
+                line: name.line,
+                column: name.column,
+                start: name.start,
+                end: name.end,
+            }));
         }
         scope.insert(
             name.lexeme.clone(),
@@ -214,6 +244,7 @@ impl Resolver {
                 is_used: false,
                 is_defined: false,
                 is_function_param,
+                token: name.clone(),
             },
         );
         Ok(())
@@ -229,6 +260,7 @@ impl Resolver {
                 is_defined: true,
                 is_used: false,
                 is_function_param,
+                token: name.clone(),
             },
         );
         Ok(())

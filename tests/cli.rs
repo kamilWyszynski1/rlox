@@ -6,7 +6,7 @@ macro_rules! test_set {
         #[test]
         fn $name() -> Result<(), Box<dyn std::error::Error>> {
             let mut cmd = Command::cargo_bin("rlox")?;
-            cmd.arg("-f").arg($path);
+            cmd.arg("-f").arg($path).arg("--verbose").arg("false");
             cmd.assert()
                 .success()
                 .stdout(predicate::str::is_match($result)?);
@@ -20,7 +20,7 @@ macro_rules! test_set_error {
         #[test]
         fn $name() -> Result<(), Box<dyn std::error::Error>> {
             let mut cmd = Command::cargo_bin("rlox")?;
-            cmd.arg("-f").arg($path);
+            cmd.arg("-f").arg($path).arg("--verbose").arg("false");
             cmd.assert()
                 .failure()
                 .stderr(predicate::str::is_match($result)?);
@@ -67,11 +67,17 @@ test_set_error!(
     "Error: Can't return from top-level code."
 );
 
-// test_set_error!(
-//     variable_not_used,
-//     "examples/variable_not_used.lox",
-//     "Error: Variable b is never used"
-// );
+test_set_error!(
+    cannot_read_var_in_init,
+    "examples/local_variable_in_init.lox",
+    "Error: Can't read local variable in its own initializer."
+);
+
+test_set_error!(
+    variable_not_used,
+    "examples/variable_not_used.lox",
+    "Error: Variable b is never used"
+);
 
 #[test]
 fn test_while_loop() -> anyhow::Result<()> {
