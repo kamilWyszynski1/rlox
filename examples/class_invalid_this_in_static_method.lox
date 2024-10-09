@@ -1,0 +1,10 @@
+class Math {
+  init() {
+    this.foo = 2;
+  }
+  class square(n) {
+    return n * n * this.foo;
+  }
+}
+
+print Math.square(3); // Prints "9".

@@ -3,6 +3,7 @@ use crate::error::error::{ErrorType, RLoxError};
 use crate::interpreter::interpreter::Interpreter;
 use crate::representation::token::{Token, TokenType};
 use anyhow::{anyhow, bail, Context};
+use std::cmp::PartialEq;
 use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug, Clone)]
@@ -13,10 +14,11 @@ struct VariableInfo {
     token: Token,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum FunctionType {
     Function,
     Method,
+    StaticMethod,
     Initializer,
     None,
 }
@@ -78,7 +80,12 @@ impl Resolver {
     fn resolve_stmt(&mut self, stmt: &Stmt) -> anyhow::Result<()> {
         match stmt {
             Stmt::Expression { expression } => self.resolve_expr(&expression)?,
-            Stmt::Function { name, params, body } => {
+            Stmt::Function {
+                name,
+                params,
+                body,
+                is_static_method,
+            } => {
                 self.declare(&name, false)?;
                 self.define(&name, false)?;
 
@@ -168,9 +175,28 @@ impl Resolver {
                     },
                 );
                 for method in methods {
-                    if let Stmt::Function { name, params, body } = method {
+                    if let Stmt::Function {
+                        name,
+                        params,
+                        body,
+                        is_static_method,
+                    } = method
+                    {
                         let fn_type = if name.lexeme.eq("init") {
+                            if *is_static_method {
+                                return Err(anyhow!(RLoxError {
+                                    error: ErrorType::Resolve(
+                                        "Init method cannot be static".to_string()
+                                    ),
+                                    line: name.line,
+                                    column: name.column,
+                                    start: name.start,
+                                    end: name.end,
+                                }));
+                            }
                             FunctionType::Initializer
+                        } else if *is_static_method {
+                            FunctionType::StaticMethod
                         } else {
                             FunctionType::Method
                         };
@@ -295,6 +321,19 @@ impl Resolver {
                         end: keyword.end,
                     }));
                 }
+
+                if self.current_function == FunctionType::StaticMethod {
+                    return Err(anyhow!(RLoxError {
+                        error: ErrorType::Resolve(
+                            "Can't access 'this' keyword in static method.".to_string()
+                        ),
+                        line: keyword.line,
+                        column: keyword.column,
+                        start: keyword.start,
+                        end: keyword.end,
+                    }));
+                }
+
                 self.resolve_local(keyword)?;
             }
         }

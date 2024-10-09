@@ -9,13 +9,19 @@ use std::rc::Rc;
 pub struct LoxClass {
     pub(crate) name: String,
     methods: HashMap<String, CallableObject>, // stores RuntimeValue::Callable objects
+    pub static_methods: HashMap<String, CallableObject>,
 }
 
 impl LoxClass {
-    pub fn new(name: String, class_methods: HashMap<String, CallableObject>) -> Self {
+    pub fn new(
+        name: String,
+        class_methods: HashMap<String, CallableObject>,
+        static_methods: HashMap<String, CallableObject>,
+    ) -> Self {
         Self {
             name,
             methods: class_methods,
+            static_methods,
         }
     }
 
@@ -26,7 +32,7 @@ impl LoxClass {
 
 impl Display for LoxClass {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)
+        write!(f, "Class {}", self.name)
     }
 }
 

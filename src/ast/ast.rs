@@ -9,6 +9,7 @@ pub enum Stmt {
         name: Token,
         params: Vec<Token>,
         body: Vec<Stmt>,
+        is_static_method: bool,
     },
     Print {
         expression: Expr,

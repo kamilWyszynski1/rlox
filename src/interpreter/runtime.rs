@@ -1,5 +1,5 @@
 use crate::ast::ast::LiteralValue;
-use crate::interpreter::class::LoxInstance;
+use crate::interpreter::class::{LoxClass, LoxInstance};
 use crate::interpreter::interpreter::LoxCallable;
 use anyhow::{anyhow, bail};
 use std::fmt::{Debug, Display};
@@ -12,6 +12,7 @@ pub enum RuntimeValue {
     Number(f64),
     String(String),
     Callable(Rc<dyn LoxCallable>),
+    Class(LoxClass),
     Instance(LoxInstance),
 }
 
@@ -23,7 +24,8 @@ impl RuntimeValue {
             | RuntimeValue::Number(_)
             | RuntimeValue::String(_)
             | RuntimeValue::Callable(_)
-            | RuntimeValue::Instance(_) => true,
+            | RuntimeValue::Instance(_)
+            | RuntimeValue::Class(_) => true,
             RuntimeValue::Bool(false) | RuntimeValue::Null => false,
         }
     }
@@ -48,7 +50,8 @@ impl Debug for RuntimeValue {
             RuntimeValue::Null => "null".to_string(),
             RuntimeValue::Number(n) => n.to_string(),
             RuntimeValue::String(s) => s.clone(),
-            RuntimeValue::Callable(c) => format!("{}", c),
+            RuntimeValue::Callable(c) => format!("{:?}", c),
+            RuntimeValue::Class(c) => format!("Class {:?}", c),
             RuntimeValue::Instance(instance) => format!("{:?}", instance),
         };
         write!(f, "{}", str)
@@ -63,6 +66,7 @@ impl Display for RuntimeValue {
             RuntimeValue::Number(n) => n.to_string(),
             RuntimeValue::String(s) => s.clone(),
             RuntimeValue::Callable(c) => format!("{}", c),
+            RuntimeValue::Class(c) => format!("Class {}", c),
             RuntimeValue::Instance(instance) => format!("{}", instance),
         };
         write!(f, "{}", str)
@@ -94,6 +98,7 @@ impl TryInto<f64> for RuntimeValue {
                 .map_err(|_| anyhow!("Cannot convert runtime value (String, {string}) to number")),
             RuntimeValue::Callable(_) => bail!("Cannot convert runtime value (Callable) to number"),
             RuntimeValue::Instance(_) => bail!("Cannot convert runtime value (Instance) to number"),
+            RuntimeValue::Class(_) => bail!("Cannot convert runtime value (Class) to number"),
         }
     }
 }

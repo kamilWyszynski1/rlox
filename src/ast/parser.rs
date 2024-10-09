@@ -13,7 +13,9 @@ use anyhow::{bail, Context};
 //                | varDecl
 //                | statement ;
 //
-// classDecl      → "class" IDENTIFIER "{" function* "}" ;
+// classDecl      → "class" IDENTIFIER "{" ( function | staticMethod )* "}" ;
+//
+// staticMethod   → "class" function ;
 //
 // funDecl        → "fun" function ;
 // function       → IDENTIFIER "(" parameters? ")" block ;
@@ -103,7 +105,7 @@ impl Parser {
             // TODO: synchronize?
             Some(token) => match token.token_type {
                 Var => self.var_declaration(),
-                Fun => self.fun(),
+                Fun => self.fun(false),
                 Class => self.class_declaration(),
                 _ => bail!("unsupported token type in declaration method"),
             },
@@ -117,9 +119,18 @@ impl Parser {
 
         let mut methods = vec![];
         loop {
-            match self.fun() {
+            let mut is_static_method = false;
+            if let Some(token) = self.match_token_types(&[Class]) {
+                // parse static method
+                is_static_method = true;
+            }
+
+            match self.fun(is_static_method) {
                 Ok(method) => methods.push(method),
                 Err(err) => {
+                    if is_static_method {
+                        bail!("Expect static method name")
+                    }
                     if err.to_string().contains("Expect function name") {
                         break;
                     }
@@ -131,7 +142,7 @@ impl Parser {
         Ok(Stmt::Class { name, methods })
     }
 
-    fn fun(&mut self) -> anyhow::Result<Stmt> {
+    fn fun(&mut self, is_static_method: bool) -> anyhow::Result<Stmt> {
         let name = self.consume(Identifier).context("Expect function name")?;
         self.consume(LeftParen)
             .context("Expect '(' after function name")?;
@@ -162,6 +173,7 @@ impl Parser {
                 name,
                 params,
                 body: statements,
+                is_static_method,
             })
         } else {
             bail!("expected block")

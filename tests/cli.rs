@@ -83,15 +83,22 @@ test_set_error!(
 test_set!(
     simple_class_prints,
     "examples/class.lox",
-    r#"DevonshireCream
-DevonshireCream instance
+    r#"Class DevonshireCream
+Class DevonshireCream instance
 1
 2
 100
 100
 Crunch crunch crunch!
 The German chocolate cake is delicious!
-Thing instance
+Class Thing instance
+"#
+);
+
+test_set!(
+    class_static_method,
+    "examples/class_static_method.lox",
+    r#"9
 "#
 );
 
@@ -104,9 +111,9 @@ test_set_error!(
 test_set!(
     class_init,
     "examples/class_init.lox",
-    r#"Foo instance
-Foo instance
-Foo instance
+    r#"Class Foo instance
+Class Foo instance
+Class Foo instance
 lol
 "#
 );
@@ -115,6 +122,13 @@ test_set_error!(
     class_invalid_return_from_init,
     "examples/class_invalid_return_from_init.lox",
     "Error: Undefined property 'secondField'."
+);
+
+test_set_error!(
+    class_invalid_this_in_static_method,
+    "examples/class_invalid_this_in_static_method.lox",
+    r#"Error: Can't access 'this' keyword in static method.
+"#
 );
 
 #[test]

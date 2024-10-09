@@ -226,7 +226,12 @@ impl Interpreter {
                 loop_break: true,
                 function_return: None,
             })),
-            Stmt::Function { name, params, body } => {
+            Stmt::Function {
+                name,
+                params,
+                body,
+                is_static_method,
+            } => {
                 let function_env = Rc::new(RefCell::new(self.environment.borrow().clone()));
                 let callable = Rc::new(CallableObject::new(params, body, function_env));
                 self.environment.try_borrow_mut()?.define(
@@ -253,23 +258,34 @@ impl Interpreter {
                 );
 
                 let mut class_methods: HashMap<String, CallableObject> = HashMap::new();
+                let mut static_class_methods: HashMap<String, CallableObject> = HashMap::new();
                 for method in methods {
                     let method_env = Rc::new(RefCell::new(self.environment.borrow().clone()));
-                    if let Stmt::Function { name, params, body } = method {
+                    if let Stmt::Function {
+                        name,
+                        params,
+                        body,
+                        is_static_method,
+                    } = method
+                    {
                         let mut function = CallableObject::new(params, body, method_env);
                         if name.lexeme.eq("init") {
                             function = function.with_initializer();
                         }
-                        class_methods.insert(name.lexeme, function);
+                        if is_static_method {
+                            static_class_methods.insert(name.lexeme.clone(), function);
+                        } else {
+                            class_methods.insert(name.lexeme, function);
+                        }
                     } else {
                         bail!("Interpreter: Class' method should be a function type")
                     }
                 }
 
-                let klass = LoxClass::new(name.lexeme.clone(), class_methods);
+                let klass = LoxClass::new(name.lexeme.clone(), class_methods, static_class_methods);
                 self.environment.try_borrow_mut()?.assign(
                     &name.lexeme,
-                    Rc::new(RefCell::new(RuntimeValue::Callable(Rc::new(klass)))),
+                    Rc::new(RefCell::new(RuntimeValue::Class(klass))),
                 )?;
                 Ok(None)
             }
@@ -421,27 +437,54 @@ impl Interpreter {
                     .map(|arg| self.evaluate_expr(arg))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                if let RuntimeValue::Callable(c) = callee {
-                    if c.arity() != arguments.len() {
-                        bail!("function must be called with {} arguments", c.arity())
+                match callee {
+                    RuntimeValue::Callable(c) => {
+                        if c.arity() != arguments.len() {
+                            bail!("function must be called with {} arguments", c.arity())
+                        }
+                        c.call(self, lox_arguments)
                     }
-                    c.call(self, lox_arguments)
-                } else {
-                    bail!("only callable can be invoked")
+                    RuntimeValue::Class(class) => {
+                        if class.arity() != arguments.len() {
+                            bail!("function must be called with {} arguments", class.arity())
+                        }
+                        class.call(self, lox_arguments)
+                    }
+                    _ => bail!("only callable or class(constructor) can be invoked"),
                 }
             }
             Expr::Get { object, name } => {
                 let evaluated = self.evaluate_expr(object)?;
-                let x = if let RuntimeValue::Instance(instance) = evaluated.try_borrow()?.clone() {
-                    let v = instance
-                        .get(&name.lexeme)
-                        .context(format!("Undefined property '{}'.", name.lexeme))?
-                        .clone();
-                    Ok(Rc::new(RefCell::new(v)))
-                } else {
-                    bail!("Only instances have properties.")
-                };
-                x
+                let c = evaluated.try_borrow()?.clone();
+                match c {
+                    RuntimeValue::Instance(instance) => {
+                        let v = instance
+                            .get(&name.lexeme)
+                            .context(format!("Undefined property '{}'.", name.lexeme))?
+                            .clone();
+                        Ok(Rc::new(RefCell::new(v)))
+                    }
+                    RuntimeValue::Class(class) => {
+                        // at that point we can only access class' static methods
+                        let v = class
+                            .static_methods
+                            .get(&name.lexeme)
+                            .context(format!("Undefined property '{}'.", name.lexeme))?
+                            .clone();
+                        Ok(Rc::new(RefCell::new(RuntimeValue::Callable(Rc::new(v)))))
+                    }
+                    _ => bail!("Only instances or class have properties."),
+                }
+                // let x = if let RuntimeValue::Instance(instance) = evaluated.try_borrow()?.clone() {
+                //     let v = instance
+                //         .get(&name.lexeme)
+                //         .context(format!("Undefined property '{}'.", name.lexeme))?
+                //         .clone();
+                //     Ok(Rc::new(RefCell::new(v)))
+                // } else {
+                //     bail!("Only instances have properties.")
+                // };
+                // x
             }
 
             Expr::Set {
