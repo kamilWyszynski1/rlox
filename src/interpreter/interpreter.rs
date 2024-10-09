@@ -251,7 +251,11 @@ impl Interpreter {
                     function_return,
                 }))
             }
-            Stmt::Class { name, methods } => {
+            Stmt::Class {
+                name,
+                methods,
+                static_fields,
+            } => {
                 self.environment.try_borrow_mut()?.define(
                     name.lexeme.clone(),
                     Rc::new(RefCell::new(RuntimeValue::Null)),
@@ -282,7 +286,17 @@ impl Interpreter {
                     }
                 }
 
-                let klass = LoxClass::new(name.lexeme.clone(), class_methods, static_class_methods);
+                let mut fields = HashMap::new();
+                for (name, expr) in static_fields {
+                    fields.insert(name.lexeme, self.evaluate_expr(&expr)?);
+                }
+
+                let klass = LoxClass::new(
+                    name.lexeme.clone(),
+                    class_methods,
+                    static_class_methods,
+                    fields,
+                );
                 self.environment.try_borrow_mut()?.assign(
                     &name.lexeme,
                     Rc::new(RefCell::new(RuntimeValue::Class(klass))),
@@ -466,25 +480,12 @@ impl Interpreter {
                     }
                     RuntimeValue::Class(class) => {
                         // at that point we can only access class' static methods
-                        let v = class
-                            .static_methods
+                        class
                             .get(&name.lexeme)
-                            .context(format!("Undefined property '{}'.", name.lexeme))?
-                            .clone();
-                        Ok(Rc::new(RefCell::new(RuntimeValue::Callable(Rc::new(v)))))
+                            .context(format!("Undefined property '{}'.", name.lexeme))
                     }
                     _ => bail!("Only instances or class have properties."),
                 }
-                // let x = if let RuntimeValue::Instance(instance) = evaluated.try_borrow()?.clone() {
-                //     let v = instance
-                //         .get(&name.lexeme)
-                //         .context(format!("Undefined property '{}'.", name.lexeme))?
-                //         .clone();
-                //     Ok(Rc::new(RefCell::new(v)))
-                // } else {
-                //     bail!("Only instances have properties.")
-                // };
-                // x
             }
 
             Expr::Set {
@@ -493,18 +494,33 @@ impl Interpreter {
                 value,
             } => {
                 let evaluated = self.evaluate_expr(object)?;
+                // let mut borrowed = evaluated.try_borrow_mut()?;
+                // let x = if let RuntimeValue::Instance(mut instance) = borrowed.clone() {
+                //     let value = self.evaluate_expr(value)?;
+                //
+                //     instance.set(name.lexeme.clone(), value.try_borrow()?.clone());
+                //     *borrowed = RuntimeValue::Instance(instance);
+                //
+                //     Ok(value)
+                // } else {
+                //     bail!("Only instances have properties.")
+                // };
+
+                let value = self.evaluate_expr(value)?;
+
                 let mut borrowed = evaluated.try_borrow_mut()?;
-                let x = if let RuntimeValue::Instance(mut instance) = borrowed.clone() {
-                    let value = self.evaluate_expr(value)?;
-
-                    instance.set(name.lexeme.clone(), value.try_borrow()?.clone());
-                    *borrowed = RuntimeValue::Instance(instance);
-
-                    Ok(value)
-                } else {
-                    bail!("Only instances have properties.")
-                };
-                x
+                match borrowed.clone() {
+                    RuntimeValue::Instance(mut instance) => {
+                        instance.set(name.lexeme.clone(), value.try_borrow()?.clone());
+                        *borrowed = RuntimeValue::Instance(instance);
+                    }
+                    RuntimeValue::Class(class) => {
+                        // at that point we can only access class' static fields
+                        class.set(&name.lexeme, (*value.borrow()).clone())?;
+                    }
+                    _ => bail!("Only instances or class have properties."),
+                }
+                Ok(value)
             }
 
             Expr::This { keyword } => self.visit_expr_var(keyword),

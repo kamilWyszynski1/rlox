@@ -1,7 +1,12 @@
 class Math {
+  static foo = (3 == 3);
+
   class square(n) {
-    return n * n ;
+    return n * n;
   }
 }
 
 print Math.square(3); // Prints "9".
+print Math.foo;
+Math.foo = false;
+print Math.foo;

@@ -99,7 +99,15 @@ test_set!(
     class_static_method,
     "examples/class_static_method.lox",
     r#"9
+true
+false
 "#
+);
+
+test_set_error!(
+    class_not_unique_static_fields,
+    "examples/class_not_unique_static_fields.lox",
+    "Error: Static field names must be unique."
 );
 
 test_set_error!(
@@ -112,8 +120,9 @@ test_set!(
     class_init,
     "examples/class_init.lox",
     r#"Class Foo instance
+50
 Class Foo instance
-Class Foo instance
+60
 lol
 "#
 );

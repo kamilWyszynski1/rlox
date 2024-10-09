@@ -1,0 +1,5 @@
+class Foo {
+  static foo = (3 == 3);
+  static boo = "lol";
+  static foo = 123;
+}

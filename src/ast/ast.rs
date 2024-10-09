@@ -24,6 +24,7 @@ pub enum Stmt {
     Class {
         name: Token,
         methods: Vec<Stmt>, // list of functions
+        static_fields: Vec<(Token, Expr)>,
     },
     If {
         condition: Expr,

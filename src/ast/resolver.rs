@@ -4,7 +4,8 @@ use crate::interpreter::interpreter::Interpreter;
 use crate::representation::token::{Token, TokenType};
 use anyhow::{anyhow, bail, Context};
 use std::cmp::PartialEq;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::hash::Hash;
 
 #[derive(Debug, Clone)]
 struct VariableInfo {
@@ -157,13 +158,19 @@ impl Resolver {
                     self.resolve_stmt(else_branch)?;
                 }
             }
-            Stmt::Class { name, methods } => {
+            Stmt::Class {
+                name,
+                methods,
+                static_fields,
+            } => {
                 let enclosing = self.current_class;
                 self.current_class = ClassType::Class;
 
                 self.declare(&name, false)?;
                 self.define(&name, false)?;
 
+                // resolve static fields
+                has_unique_elements(static_fields)?;
                 self.begin_scope();
                 self.scopes.front_mut().unwrap().insert(
                     "this".to_string(),
@@ -423,6 +430,22 @@ impl Resolver {
         );
         Ok(())
     }
+}
+
+fn has_unique_elements(iter: &[(Token, Expr)]) -> anyhow::Result<()> {
+    let mut set = HashSet::new();
+    for (name, _) in iter {
+        if !set.insert(name.lexeme.clone()) {
+            return Err(anyhow!(RLoxError {
+                error: ErrorType::Resolve("Static field names must be unique.".to_string()),
+                line: name.line,
+                column: name.column,
+                start: name.start,
+                end: name.end,
+            }));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

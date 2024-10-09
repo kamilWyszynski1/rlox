@@ -1,5 +1,6 @@
 use crate::interpreter::interpreter::{CallableObject, Interpreter, LoxCallable};
 use crate::interpreter::runtime::RuntimeValue;
+use anyhow::Context;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -10,6 +11,7 @@ pub struct LoxClass {
     pub(crate) name: String,
     methods: HashMap<String, CallableObject>, // stores RuntimeValue::Callable objects
     pub static_methods: HashMap<String, CallableObject>,
+    pub static_fields: HashMap<String, Rc<RefCell<RuntimeValue>>>,
 }
 
 impl LoxClass {
@@ -17,16 +19,42 @@ impl LoxClass {
         name: String,
         class_methods: HashMap<String, CallableObject>,
         static_methods: HashMap<String, CallableObject>,
+        static_fields: HashMap<String, Rc<RefCell<RuntimeValue>>>,
     ) -> Self {
         Self {
             name,
             methods: class_methods,
             static_methods,
+            static_fields,
         }
     }
 
     fn find_method(&self, name: &str) -> Option<&CallableObject> {
         self.methods.get(name)
+    }
+
+    pub fn get(&self, name: &str) -> Option<Rc<RefCell<RuntimeValue>>> {
+        if let Some(field) = self.static_fields.get(name) {
+            return Some(field.clone());
+        }
+
+        if let Some(method) = self.static_methods.get(name) {
+            return Some(Rc::new(RefCell::new(RuntimeValue::Callable(Rc::new(
+                method.clone(),
+            )))));
+        }
+        None
+    }
+
+    /// This method can only set class' static field value.
+    pub fn set(&self, name: &str, value: RuntimeValue) -> anyhow::Result<()> {
+        let field_value = self
+            .static_fields
+            .get(name)
+            .context("no static field with given name")?;
+
+        *field_value.try_borrow_mut()? = value;
+        Ok(())
     }
 }
 

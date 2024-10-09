@@ -70,6 +70,7 @@ pub enum TokenType {
 
     And,
     Class,
+    Static,
     Else,
     False,
     Fun,
@@ -92,6 +93,7 @@ lazy_static! {
         let mut m = HashMap::new();
         m.insert("and", TokenType::And);
         m.insert("class", TokenType::Class);
+        m.insert("static", TokenType::Static);
         m.insert("else", TokenType::Else);
         m.insert("false", TokenType::False);
         m.insert("for", TokenType::For);

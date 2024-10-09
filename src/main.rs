@@ -3,7 +3,7 @@
 extern crate core;
 extern crate lazy_static;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Error};
 use clap::{ArgAction, Parser};
 use miette::{miette, LabeledSpan, Severity};
 use std::io::{Read, Write};
@@ -84,34 +84,43 @@ fn run_from_file(file: &str, args: &Args) -> anyhow::Result<()> {
 
     let mut lexer = Lexer::new(&contents);
     let tokens = lexer.scan_tokens()?;
-    let expressions = parser::Parser::new(tokens).parse()?;
-
-    let resolver: Resolver = Resolver::new(Interpreter::new());
-    match resolver.resolve(&expressions) {
-        Ok(mut interpreter) => {
-            interpreter.interpret(expressions)?;
-        }
-        Err(err) => match err.downcast::<RLoxError>() {
-            Ok(rloxerr) => {
-                if !args.verbose {
-                    eprintln!("Error: {}", rloxerr.error);
-                    exit(1);
-                } else {
-                    format_rlox_error(&rloxerr, &contents)
+    match parser::Parser::new(tokens).parse() {
+        Ok(expressions) => {
+            let resolver: Resolver = Resolver::new(Interpreter::new());
+            match resolver.resolve(&expressions) {
+                Ok(mut interpreter) => {
+                    interpreter.interpret(expressions)?;
                 }
+                Err(err) => handle_error(err, args, &contents)?,
             }
-            Err(err) => {
-                return Err(anyhow!(err));
-            }
-        },
+        }
+        Err(err) => handle_error(err, args, &contents)?,
     }
+
     Ok(())
 }
 
+fn handle_error(err: Error, args: &Args, contents: &str) -> anyhow::Result<()> {
+    match err.downcast::<RLoxError>() {
+        Ok(rloxerr) => {
+            if !args.verbose {
+                eprintln!("Error: {}", rloxerr.error);
+                exit(1);
+            } else {
+                format_rlox_error(&rloxerr, &contents);
+                Ok(())
+            }
+        }
+        Err(err) => {
+            return Err(anyhow!(err));
+        }
+    }
+}
+
 fn format_rlox_error(err: &RLoxError, content: &str) {
-    match &err.error {
+    let report = match &err.error {
         ErrorType::Resolve(msg) => {
-            let report = miette!(
+            miette!(
                 // Those fields are optional
                 severity = Severity::Error,
                 help = msg,
@@ -120,8 +129,20 @@ fn format_rlox_error(err: &RLoxError, content: &str) {
                 // to form diagnostic message
                 "Resolving error"
             )
-            .with_source_code(content.to_string());
-            println!("{:?}", report);
+            .with_source_code(content.to_string())
         }
-    }
+        ErrorType::Parse(msg) => {
+            miette!(
+                // Those fields are optional
+                severity = Severity::Error,
+                help = msg,
+                labels = vec![LabeledSpan::at(err.start..err.end, "here")],
+                // Rest of the arguments are passed to `format!`
+                // to form diagnostic message
+                "Parse error"
+            )
+            .with_source_code(content.to_string())
+        }
+    };
+    println!("{:?}", report);
 }

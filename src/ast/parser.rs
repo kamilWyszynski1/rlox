@@ -13,7 +13,9 @@ use anyhow::{bail, Context};
 //                | varDecl
 //                | statement ;
 //
-// classDecl      → "class" IDENTIFIER "{" ( function | staticMethod )* "}" ;
+// classDecl      → "class" IDENTIFIER "{" ( function | staticMethod | staticField )* "}" ;
+//
+// staticField    → "static" IDENTIFIER "=" primary ;
 //
 // staticMethod   → "class" function ;
 //
@@ -118,11 +120,32 @@ impl Parser {
         self.consume(LeftBrace).context("Expect '{'")?;
 
         let mut methods = vec![];
+        let mut static_fields = vec![];
         loop {
             let mut is_static_method = false;
-            if let Some(token) = self.match_token_types(&[Class]) {
-                // parse static method
-                is_static_method = true;
+            if let Some(token) = self.match_token_types(&[Class, Static]) {
+                match token.token_type {
+                    Static => {
+                        // parse static field
+                        let field_name = self
+                            .consume(Identifier)
+                            .context("Expect static field name")?;
+
+                        self.consume(Equal).context("Expect '='")?;
+
+                        let value = self.primary().context("invalid static field value")?;
+
+                        self.consume(Semicolon).context("Expect ';'")?;
+
+                        static_fields.push((field_name, value));
+                        continue;
+                    }
+                    Class => {
+                        // parse static method
+                        is_static_method = true;
+                    }
+                    _ => unreachable!(),
+                }
             }
 
             match self.fun(is_static_method) {
@@ -139,7 +162,11 @@ impl Parser {
             }
         }
         self.consume(RightBrace).context("Expect '}'")?;
-        Ok(Stmt::Class { name, methods })
+        Ok(Stmt::Class {
+            name,
+            methods,
+            static_fields,
+        })
     }
 
     fn fun(&mut self, is_static_method: bool) -> anyhow::Result<Stmt> {
