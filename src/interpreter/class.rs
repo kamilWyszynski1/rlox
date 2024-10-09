@@ -33,16 +33,26 @@ impl Display for LoxClass {
 impl LoxCallable for LoxClass {
     fn call(
         &self,
-        _interpreter: &mut Interpreter,
-        _arguments: Vec<Rc<RefCell<RuntimeValue>>>,
+        interpreter: &mut Interpreter,
+        arguments: Vec<Rc<RefCell<RuntimeValue>>>,
     ) -> anyhow::Result<Rc<RefCell<RuntimeValue>>> {
-        Ok(Rc::new(RefCell::new(RuntimeValue::Instance(
-            LoxInstance::new(self.clone()),
-        ))))
+        let instance = Rc::new(RefCell::new(RuntimeValue::Instance(LoxInstance::new(
+            self.clone(),
+        ))));
+
+        if let Some(initializer) = self.find_method("init") {
+            // run init method if  provided
+            initializer
+                .bind(instance.clone())
+                .call(interpreter, arguments)?;
+        }
+
+        Ok(instance)
     }
 
     fn arity(&self) -> usize {
-        0
+        self.find_method("init")
+            .map_or(0, |initializer| initializer.arity())
     }
 }
 
@@ -66,7 +76,7 @@ impl LoxInstance {
         }
 
         if let Some(method) = self.klass.find_method(name) {
-            let copy = self.clone();
+            let copy = Rc::new(RefCell::new(RuntimeValue::Instance(self.clone())));
             let binded = method.bind(copy);
             let result = RuntimeValue::Callable(Rc::new(binded));
             return Some(result);

@@ -1,0 +1,15 @@
+class Foo {
+  init() {
+    this.field = "lol";
+
+    if (this.field == "lol") {
+        print "true";
+        return;
+    }
+    this.secondField = "lol3";
+  }
+}
+
+var foo = Foo();
+print foo.field;
+print foo.secondField;

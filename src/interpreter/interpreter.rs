@@ -1,5 +1,5 @@
 use crate::ast::ast::{Expr, Stmt};
-use crate::interpreter::class::{LoxClass, LoxInstance};
+use crate::interpreter::class::LoxClass;
 use crate::interpreter::environment::Environment;
 use crate::interpreter::native::ClockCaller;
 use crate::interpreter::runtime::RuntimeValue;
@@ -24,6 +24,7 @@ pub struct CallableObject {
     closure: Rc<RefCell<Environment>>,
     parameters: Vec<Token>,
     body: Vec<Stmt>,
+    if_initializer: bool,
 }
 
 impl CallableObject {
@@ -32,15 +33,18 @@ impl CallableObject {
             parameters,
             body,
             closure,
+            if_initializer: false,
         }
     }
 
-    pub fn bind(&self, instance: LoxInstance) -> Self {
+    fn with_initializer(mut self) -> Self {
+        self.if_initializer = true;
+        self
+    }
+
+    pub fn bind(&self, instance: Rc<RefCell<RuntimeValue>>) -> Self {
         let mut env = Environment::new(self.closure.clone());
-        env.define(
-            "this".to_string(),
-            Rc::new(RefCell::new(RuntimeValue::Instance(instance))),
-        );
+        env.define("this".to_string(), instance);
         Self {
             closure: Rc::new(RefCell::new(env)),
             ..self.clone()
@@ -83,6 +87,10 @@ impl LoxCallable for CallableObject {
         // *self.closure.borrow_mut() = interpreter.environment.borrow().clone();
         // revert environment change
         interpreter.environment = copied;
+
+        if self.if_initializer {
+            return Ok(self.closure.try_borrow()?.get("this").unwrap());
+        }
         Ok(value)
     }
 
@@ -231,7 +239,7 @@ impl Interpreter {
                 let function_return = if let Some(expr) = expr {
                     Some(self.evaluate_expr(&expr)?)
                 } else {
-                    None
+                    self.environment.try_borrow_mut()?.get("this")
                 };
                 Ok(Some(ExecutionInfo {
                     loop_break: false,
@@ -248,7 +256,10 @@ impl Interpreter {
                 for method in methods {
                     let method_env = Rc::new(RefCell::new(self.environment.borrow().clone()));
                     if let Stmt::Function { name, params, body } = method {
-                        let function = CallableObject::new(params, body, method_env);
+                        let mut function = CallableObject::new(params, body, method_env);
+                        if name.lexeme.eq("init") {
+                            function = function.with_initializer();
+                        }
                         class_methods.insert(name.lexeme, function);
                     } else {
                         bail!("Interpreter: Class' method should be a function type")

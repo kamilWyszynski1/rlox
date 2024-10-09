@@ -17,6 +17,7 @@ struct VariableInfo {
 enum FunctionType {
     Function,
     Method,
+    Initializer,
     None,
 }
 
@@ -78,21 +79,10 @@ impl Resolver {
         match stmt {
             Stmt::Expression { expression } => self.resolve_expr(&expression)?,
             Stmt::Function { name, params, body } => {
-                // let reset = if !self.current_function.is_function_like() {
-                //     true
-                // } else {
-                //     false
-                // };
-
                 self.declare(&name, false)?;
                 self.define(&name, false)?;
 
                 self.resolve_function(params, body, FunctionType::Function)?;
-                // if reset {
-                //     // reset only if it's first-level function call, we should not reset
-                //     // variable in case of closures
-                //     self.current_function = FunctionType::None;
-                // }
             }
             Stmt::Print { expression } => self.resolve_expr(&expression)?,
             Stmt::Var { name, initializer } => {
@@ -118,14 +108,32 @@ impl Resolver {
             }
             Stmt::Break => {}
             Stmt::Return { expr, keyword } => {
-                if !self.current_function.is_function_like() {
-                    return Err(anyhow!(RLoxError {
-                        error: ErrorType::Resolve("Can't return from top-level code.".to_string()),
-                        line: keyword.line,
-                        column: keyword.column,
-                        start: keyword.start,
-                        end: keyword.end,
-                    }));
+                match self.current_function {
+                    FunctionType::Initializer => {
+                        if expr.is_some() {
+                            return Err(anyhow!(RLoxError {
+                                error: ErrorType::Resolve(
+                                    "Can't return from init method".to_string()
+                                ),
+                                line: keyword.line,
+                                column: keyword.column,
+                                start: keyword.start,
+                                end: keyword.end,
+                            }));
+                        }
+                    }
+                    FunctionType::None => {
+                        return Err(anyhow!(RLoxError {
+                            error: ErrorType::Resolve(
+                                "Can't return from top-level code.".to_string()
+                            ),
+                            line: keyword.line,
+                            column: keyword.column,
+                            start: keyword.start,
+                            end: keyword.end,
+                        }))
+                    }
+                    _ => {}
                 }
                 if let Some(expr) = expr {
                     self.resolve_expr(&expr)?;
@@ -161,7 +169,12 @@ impl Resolver {
                 );
                 for method in methods {
                     if let Stmt::Function { name, params, body } = method {
-                        self.resolve_function(params, body, FunctionType::Method)?;
+                        let fn_type = if name.lexeme.eq("init") {
+                            FunctionType::Initializer
+                        } else {
+                            FunctionType::Method
+                        };
+                        self.resolve_function(params, body, fn_type)?;
                     } else {
                         bail!("Resolver: Class' method should be a function type")
                     }
@@ -271,7 +284,6 @@ impl Resolver {
             }
 
             Expr::This { keyword } => {
-                dbg!(&self.current_function);
                 if !matches!(self.current_class, ClassType::Class) {
                     return Err(anyhow!(RLoxError {
                         error: ErrorType::Resolve(

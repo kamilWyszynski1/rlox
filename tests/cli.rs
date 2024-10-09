@@ -101,6 +101,22 @@ test_set_error!(
     "Error: Can't use 'this' outside of a class."
 );
 
+test_set!(
+    class_init,
+    "examples/class_init.lox",
+    r#"Foo instance
+Foo instance
+Foo instance
+lol
+"#
+);
+
+test_set_error!(
+    class_invalid_return_from_init,
+    "examples/class_invalid_return_from_init.lox",
+    "Error: Undefined property 'secondField'."
+);
+
 #[test]
 fn test_while_loop() -> anyhow::Result<()> {
     let mut cmd = Command::cargo_bin("rlox")?;
