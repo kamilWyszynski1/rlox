@@ -13,7 +13,7 @@ use anyhow::{bail, Context};
 //                | varDecl
 //                | statement ;
 //
-// classDecl      → "class" IDENTIFIER "{" ( function | staticMethod | staticField )* "}" ;
+// classDecl      → "class" IDENTIFIER ( "<" IDENTIFIER )? "{" ( function | staticMethod | staticField )* "}" ;
 //
 // staticField    → "static" IDENTIFIER "=" primary ;
 //
@@ -117,7 +117,24 @@ impl Parser {
 
     fn class_declaration(&mut self) -> anyhow::Result<Stmt> {
         let name = self.consume(Identifier).context("Expect class name")?;
-        self.consume(LeftBrace).context("Expect '{'")?;
+
+        let superclass = match self.match_token_types(&[LeftBrace, Less]) {
+            Some(token) => {
+                match token.token_type {
+                    LeftBrace => None,
+                    Less => {
+                        // parse superclass
+                        let name = self.consume(Identifier).context("Expect superclass name")?;
+                        self.consume(LeftBrace).context("Expect '{'")?;
+                        Some(Variable { name })
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            None => {
+                bail!("Expect '{{'")
+            }
+        };
 
         let mut methods = vec![];
         let mut static_fields = vec![];
@@ -166,6 +183,7 @@ impl Parser {
             name,
             methods,
             static_fields,
+            superclass,
         })
     }
 

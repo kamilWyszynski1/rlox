@@ -25,6 +25,11 @@ pub enum Stmt {
         name: Token,
         methods: Vec<Stmt>, // list of functions
         static_fields: Vec<(Token, Expr)>,
+
+        // The grammar restricts the superclass clause to a single identifier, but at runtime,
+        // that identifier is evaluated as a variable access. Wrapping the name in an Expr.Variable
+        // early on in the parser gives us an object that the resolver can hang the resolution information off of.
+        superclass: Option<Expr>,
     },
     If {
         condition: Expr,

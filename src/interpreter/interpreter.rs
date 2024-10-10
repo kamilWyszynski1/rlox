@@ -255,11 +255,24 @@ impl Interpreter {
                 name,
                 methods,
                 static_fields,
+                superclass,
             } => {
                 self.environment.try_borrow_mut()?.define(
                     name.lexeme.clone(),
                     Rc::new(RefCell::new(RuntimeValue::Null)),
                 );
+
+                let superclass: Option<Rc<LoxClass>> = match superclass {
+                    Some(expr) => {
+                        let evaluated = self.evaluate_expr(&expr)?;
+                        let borrowed = evaluated.try_borrow()?;
+                        match &*borrowed {
+                            RuntimeValue::Class(c) => Some(Rc::new(c.clone())),
+                            _ => bail!("Superclass must be a class."),
+                        }
+                    }
+                    None => None,
+                };
 
                 let mut class_methods: HashMap<String, CallableObject> = HashMap::new();
                 let mut static_class_methods: HashMap<String, CallableObject> = HashMap::new();
@@ -293,6 +306,7 @@ impl Interpreter {
 
                 let klass = LoxClass::new(
                     name.lexeme.clone(),
+                    superclass,
                     class_methods,
                     static_class_methods,
                     fields,

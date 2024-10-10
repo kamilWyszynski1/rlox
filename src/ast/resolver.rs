@@ -162,6 +162,7 @@ impl Resolver {
                 name,
                 methods,
                 static_fields,
+                superclass,
             } => {
                 let enclosing = self.current_class;
                 self.current_class = ClassType::Class;
@@ -171,6 +172,30 @@ impl Resolver {
 
                 // resolve static fields
                 has_unique_elements(static_fields)?;
+
+                if let Some(superclass) = superclass {
+                    if let Expr::Variable {
+                        name: superclass_token,
+                    } = superclass
+                    {
+                        if name.lexeme == superclass_token.lexeme {
+                            return Err(anyhow!(RLoxError {
+                                error: ErrorType::Resolve(
+                                    "A class can't inherit from itself.".to_string()
+                                ),
+                                line: superclass_token.line,
+                                column: superclass_token.column,
+                                start: superclass_token.start,
+                                end: superclass_token.end,
+                            }));
+                        }
+                    } else {
+                        unreachable!()
+                    }
+
+                    self.resolve_expr(superclass)?;
+                }
+
                 self.begin_scope();
                 self.scopes.front_mut().unwrap().insert(
                     "this".to_string(),

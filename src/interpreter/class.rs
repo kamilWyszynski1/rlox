@@ -9,6 +9,9 @@ use std::rc::Rc;
 #[derive(Debug, Clone)]
 pub struct LoxClass {
     pub(crate) name: String,
+
+    pub superclass: Option<Rc<LoxClass>>,
+
     methods: HashMap<String, CallableObject>, // stores RuntimeValue::Callable objects
     pub static_methods: HashMap<String, CallableObject>,
     pub static_fields: HashMap<String, Rc<RefCell<RuntimeValue>>>,
@@ -17,12 +20,14 @@ pub struct LoxClass {
 impl LoxClass {
     pub fn new(
         name: String,
+        superclass: Option<Rc<LoxClass>>,
         class_methods: HashMap<String, CallableObject>,
         static_methods: HashMap<String, CallableObject>,
         static_fields: HashMap<String, Rc<RefCell<RuntimeValue>>>,
     ) -> Self {
         Self {
             name,
+            superclass,
             methods: class_methods,
             static_methods,
             static_fields,
@@ -30,7 +35,13 @@ impl LoxClass {
     }
 
     fn find_method(&self, name: &str) -> Option<&CallableObject> {
-        self.methods.get(name)
+        match self.methods.get(name) {
+            Some(method) => Some(method),
+            None => match &self.superclass {
+                Some(superclass) => superclass.find_method(name),
+                None => None,
+            },
+        }
     }
 
     pub fn get(&self, name: &str) -> Option<Rc<RefCell<RuntimeValue>>> {
