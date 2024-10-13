@@ -65,7 +65,7 @@ use anyhow::{bail, Context};
 // primary        → "true" | "false" | "nil"
 //                | NUMBER | STRING
 //                | "(" expression ")"
-//                | IDENTIFIER | BREAK ;
+//                | IDENTIFIER | BREAK | "super" "." IDENTIFIER ;
 pub struct Parser {
     tokens: Vec<Token>,
 
@@ -616,6 +616,17 @@ impl Parser {
                         expression: Box::new(expression),
                     });
                 }
+                Super => {
+                    let keyword = token.clone();
+                    self.current += 1; // consume
+                    self.consume(Dot).context("Expect '.' after super token")?;
+                    let ident = self.consume(Identifier).context("Expect identifier")?;
+
+                    return Ok(Expr::Super {
+                        keyword,
+                        method: ident,
+                    });
+                }
                 This => Expr::This {
                     keyword: token.clone(),
                 },
@@ -693,44 +704,4 @@ impl Parser {
         }
         Ok(())
     }
-}
-
-#[cfg(test)]
-mod tests {
-
-    // #[test]
-    // fn test_parse() {
-    //     // Define some tokens for the expression: 1 + (2 * 3)
-    //     let tokens = vec![
-    //         Token::new(TokenType::Number(1.0), "1".to_string(), 1),
-    //         Token::new(TokenType::Plus, "+".to_string(), 1),
-    //         Token::new(TokenType::LeftParen, "(".to_string(), 1),
-    //         Token::new(TokenType::Number(2.0), "2".to_string(), 1),
-    //         Token::new(TokenType::Star, "*".to_string(), 1),
-    //         Token::new(TokenType::Number(3.0), "3".to_string(), 1),
-    //         Token::new(TokenType::RightParen, ")".to_string(), 1),
-    //         Token::new(TokenType::Semicolon, ";".to_string(), 1),
-    //     ];
-    //
-    //     let mut parser = Parser::new(tokens);
-    //     let result = parser.parse();
-    //     assert_eq!(
-    //         "(+ 1 (group (* 2 3)))".to_string(),
-    //         result.unwrap()[0].to_string()
-    //     );
-    //
-    //     let tokens = vec![
-    //         Token::new(TokenType::LeftParen, "(".to_string(), 0),
-    //         Token::new(TokenType::Number(1.), "1".to_string(), 0),
-    //         Token::new(TokenType::Plus, "+".to_string(), 0),
-    //         Token::new(TokenType::Number(2.), "2".to_string(), 0),
-    //         Token::new(TokenType::RightParen, ")".to_string(), 0),
-    //         Token::new(TokenType::Star, "*".to_string(), 0),
-    //         Token::new(TokenType::Number(3.), "3".to_string(), 0),
-    //         Token::new(TokenType::Semicolon, ";".to_string(), 0),
-    //     ];
-    //     let mut parser = Parser::new(tokens);
-    //     let result = parser.parse().unwrap();
-    //     assert_eq!("(* (group (+ 1 2)) 3)".to_string(), result[0].to_string());
-    // }
 }

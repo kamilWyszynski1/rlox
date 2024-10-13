@@ -92,6 +92,10 @@ pub enum Expr {
     This {
         keyword: Token,
     },
+    Super {
+        keyword: Token,
+        method: Token,
+    },
     /// Function's call.
     Call {
         callee: Box<Expr>,
@@ -160,6 +164,7 @@ impl Expr {
             Expr::This { keyword } => {
                 format!("this {:?}", keyword)
             }
+            _ => todo!(),
         }
     }
 }

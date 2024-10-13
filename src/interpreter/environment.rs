@@ -8,7 +8,7 @@ use std::rc::Rc;
 #[derive(Clone)]
 pub struct Environment {
     values: HashMap<String, Rc<RefCell<RuntimeValue>>>,
-    enclosing: Option<Rc<RefCell<Environment>>>,
+    pub enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
 impl Debug for Environment {

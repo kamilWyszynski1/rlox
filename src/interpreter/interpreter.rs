@@ -262,12 +262,21 @@ impl Interpreter {
                     Rc::new(RefCell::new(RuntimeValue::Null)),
                 );
 
-                let superclass: Option<Rc<LoxClass>> = match superclass {
-                    Some(expr) => {
+                let superklass: Option<Rc<LoxClass>> = match superclass {
+                    Some(ref expr) => {
                         let evaluated = self.evaluate_expr(&expr)?;
                         let borrowed = evaluated.try_borrow()?;
                         match &*borrowed {
-                            RuntimeValue::Class(c) => Some(Rc::new(c.clone())),
+                            RuntimeValue::Class(c) => {
+                                self.environment = Rc::new(RefCell::new(Environment::new(
+                                    self.environment.clone(),
+                                )));
+                                self.environment.try_borrow_mut()?.define(
+                                    "super".to_string(),
+                                    Rc::new(RefCell::new(RuntimeValue::Class(c.clone()))),
+                                );
+                                Some(Rc::new(c.clone()))
+                            }
                             _ => bail!("Superclass must be a class."),
                         }
                     }
@@ -306,11 +315,23 @@ impl Interpreter {
 
                 let klass = LoxClass::new(
                     name.lexeme.clone(),
-                    superclass,
+                    superklass,
                     class_methods,
                     static_class_methods,
                     fields,
                 );
+
+                if superclass.is_some() {
+                    let enclosing = self
+                        .environment
+                        .try_borrow()?
+                        .enclosing
+                        .clone()
+                        .unwrap()
+                        .clone();
+                    self.environment = enclosing;
+                }
+
                 self.environment.try_borrow_mut()?.assign(
                     &name.lexeme,
                     Rc::new(RefCell::new(RuntimeValue::Class(klass))),
@@ -508,17 +529,6 @@ impl Interpreter {
                 value,
             } => {
                 let evaluated = self.evaluate_expr(object)?;
-                // let mut borrowed = evaluated.try_borrow_mut()?;
-                // let x = if let RuntimeValue::Instance(mut instance) = borrowed.clone() {
-                //     let value = self.evaluate_expr(value)?;
-                //
-                //     instance.set(name.lexeme.clone(), value.try_borrow()?.clone());
-                //     *borrowed = RuntimeValue::Instance(instance);
-                //
-                //     Ok(value)
-                // } else {
-                //     bail!("Only instances have properties.")
-                // };
 
                 let value = self.evaluate_expr(value)?;
 
@@ -538,6 +548,56 @@ impl Interpreter {
             }
 
             Expr::This { keyword } => self.visit_expr_var(keyword),
+
+            Expr::Super { keyword, method } => {
+                let key = ExprNameWithLine {
+                    name: keyword.lexeme.clone(),
+                    line: keyword.line,
+                    column: keyword.column,
+                };
+                match self.locals.get(&key) {
+                    Some(depth) => {
+                        let env = self.env_at(*depth)?;
+                        let superclass = env
+                            .try_borrow()?
+                            .get("super")
+                            .context("no superclass available")?;
+
+                        let object = self
+                            .env_at(*depth - 1)?
+                            .try_borrow()?
+                            .get("this")
+                            .context("no 'this' available")?;
+
+                        let cloned = superclass.try_borrow()?.clone();
+                        if let RuntimeValue::Class(class) = cloned {
+                            let method = class
+                                .find_method(&method.lexeme)
+                                .context("no method in superclass")?;
+
+                            Ok(Rc::new(RefCell::new(RuntimeValue::Callable(Rc::new(
+                                method.bind(object),
+                            )))))
+                        } else {
+                            unreachable!("superclass must be a LoxClass")
+                        }
+                    }
+                    None => {
+                        bail!("'super' not found")
+                    }
+                }
+            }
+        }
+    }
+
+    fn env_at(&self, depth: usize) -> anyhow::Result<Rc<RefCell<Environment>>> {
+        if depth == 0 {
+            Ok(self.environment.clone())
+        } else {
+            match self.environment.borrow().ancestor(depth) {
+                Some(env) => Ok(env),
+                None => bail!("cannot get environment with {} depth", depth),
+            }
         }
     }
 

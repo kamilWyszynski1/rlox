@@ -40,6 +40,7 @@ impl FunctionType {
 enum ClassType {
     None,
     Class,
+    SubClass,
 }
 
 impl Default for ClassType {
@@ -94,6 +95,18 @@ impl Resolver {
             }
             Stmt::Print { expression } => self.resolve_expr(&expression)?,
             Stmt::Var { name, initializer } => {
+                if name.lexeme.eq("super") {
+                    return Err(anyhow!(RLoxError {
+                        error: ErrorType::Resolve(
+                            "Cannot use 'super' keyword as variable name".to_string()
+                        ),
+                        line: name.line,
+                        column: name.column,
+                        start: name.start,
+                        end: name.end,
+                    }));
+                }
+
                 self.declare(&name, false)?; // mark as declared but not defined
                 if let Some(initializer) = initializer {
                     self.resolve_expr(&initializer)?;
@@ -174,6 +187,8 @@ impl Resolver {
                 has_unique_elements(static_fields)?;
 
                 if let Some(superclass) = superclass {
+                    self.current_class = ClassType::SubClass;
+
                     if let Expr::Variable {
                         name: superclass_token,
                     } = superclass
@@ -194,6 +209,17 @@ impl Resolver {
                     }
 
                     self.resolve_expr(superclass)?;
+
+                    self.begin_scope();
+                    self.scopes.front_mut().context("no front context")?.insert(
+                        "super".to_string(),
+                        VariableInfo {
+                            is_defined: true,
+                            is_used: true,
+                            is_function_param: false,
+                            token: Token::new(TokenType::Super, "this".to_string(), 0, 0, 0, 0),
+                        },
+                    );
                 }
 
                 self.begin_scope();
@@ -238,6 +264,9 @@ impl Resolver {
                     }
                 }
                 self.end_scope()?;
+                if superclass.is_some() {
+                    self.end_scope()?;
+                }
                 self.current_class = enclosing;
             }
         }
@@ -366,6 +395,32 @@ impl Resolver {
                     }));
                 }
 
+                self.resolve_local(keyword)?;
+            }
+
+            Expr::Super { keyword, method } => {
+                if matches!(self.current_class, ClassType::None) {
+                    return Err(anyhow!(RLoxError {
+                        error: ErrorType::Resolve(
+                            "Can't use 'this' outside of a class.".to_string()
+                        ),
+                        line: keyword.line,
+                        column: keyword.column,
+                        start: keyword.start,
+                        end: keyword.end,
+                    }));
+                }
+                if !matches!(self.current_class, ClassType::SubClass) {
+                    return Err(anyhow!(RLoxError {
+                        error: ErrorType::Resolve(
+                            "Can't use 'super' in a class with no superclass.".to_string()
+                        ),
+                        line: keyword.line,
+                        column: keyword.column,
+                        start: keyword.start,
+                        end: keyword.end,
+                    }));
+                }
                 self.resolve_local(keyword)?;
             }
         }

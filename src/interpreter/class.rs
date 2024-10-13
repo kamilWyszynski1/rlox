@@ -34,7 +34,7 @@ impl LoxClass {
         }
     }
 
-    fn find_method(&self, name: &str) -> Option<&CallableObject> {
+    pub fn find_method(&self, name: &str) -> Option<&CallableObject> {
         match self.methods.get(name) {
             Some(method) => Some(method),
             None => match &self.superclass {
