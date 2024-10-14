@@ -1,6 +1,7 @@
 use crate::ast::ast::{Expr, Stmt};
 use crate::interpreter::class::LoxClass;
 use crate::interpreter::environment::Environment;
+use crate::interpreter::lox_enum::{LoxEnum, LoxEnumVariant};
 use crate::interpreter::native::ClockCaller;
 use crate::interpreter::runtime::RuntimeValue;
 use crate::representation::token::{Token, TokenType};
@@ -338,6 +339,17 @@ impl Interpreter {
                 )?;
                 Ok(None)
             }
+
+            Stmt::Enum { name, variants } => {
+                self.environment.try_borrow_mut()?.define(
+                    name.lexeme.clone(),
+                    Rc::new(RefCell::new(RuntimeValue::Enum(Rc::new(LoxEnum {
+                        name: name.lexeme.clone(),
+                        variants: variants.iter().map(|t| t.lexeme.clone()).collect(),
+                    })))),
+                );
+                Ok(None)
+            }
         }
     }
 
@@ -585,6 +597,43 @@ impl Interpreter {
                     None => {
                         bail!("'super' not found")
                     }
+                }
+            }
+
+            Expr::EnumVariant {
+                enum_name,
+                variant_name,
+            } => {
+                let key = ExprNameWithLine {
+                    name: enum_name.lexeme.clone(),
+                    line: enum_name.line,
+                    column: enum_name.column,
+                };
+
+                let env = match self.locals.get(&key) {
+                    None => self.globals.clone(),
+                    Some(depth) => self.env_at(*depth)?,
+                };
+
+                let e = env
+                    .try_borrow()?
+                    .get(&enum_name.lexeme)
+                    .context("enum not found")?;
+                let cloned = e.try_borrow()?.clone();
+
+                if let RuntimeValue::Enum(lox_enum) = cloned {
+                    if !lox_enum.variants.contains(&variant_name.lexeme) {
+                        bail!("Invalid enum variant")
+                    }
+
+                    Ok(Rc::new(RefCell::new(RuntimeValue::EnumVariant(
+                        LoxEnumVariant {
+                            enum_ref: lox_enum.clone(),
+                            variant: variant_name.lexeme.clone(),
+                        },
+                    ))))
+                } else {
+                    unreachable!("enum must be a LoxEnum")
                 }
             }
         }

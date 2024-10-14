@@ -1,4 +1,4 @@
-use crate::ast::ast::Expr::{Assign, Literal, Variable};
+use crate::ast::ast::Expr::{Assign, EnumVariant, Literal, Variable};
 use crate::ast::ast::{Expr, LiteralValue, Stmt};
 use crate::representation::token::TokenType::*;
 use crate::representation::token::{Token, TokenType};
@@ -11,13 +11,16 @@ use anyhow::{bail, Context};
 // declaration    → classDecl
 //                | funDecl
 //                | varDecl
-//                | statement ;
+//                | statement
+//                | enumDecl;
 //
 // classDecl      → "class" IDENTIFIER ( "<" IDENTIFIER )? "{" ( function | staticMethod | staticField )* "}" ;
 //
 // staticField    → "static" IDENTIFIER "=" primary ;
 //
 // staticMethod   → "class" function ;
+//
+// enumDecl       → "enum" IDENTIFIER { ( IDENTIFIER )* } ";"
 //
 // funDecl        → "fun" function ;
 // function       → IDENTIFIER "(" parameters? ")" block ;
@@ -103,12 +106,13 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> anyhow::Result<Stmt> {
-        match self.match_token_types(&[Var, Fun, Class]) {
+        match self.match_token_types(&[Var, Fun, Class, Enum]) {
             // TODO: synchronize?
             Some(token) => match token.token_type {
                 Var => self.var_declaration(),
                 Fun => self.fun(false),
                 Class => self.class_declaration(),
+                Enum => self.enum_declaration(),
                 _ => bail!("unsupported token type in declaration method"),
             },
             None => self.statement(),
@@ -185,6 +189,28 @@ impl Parser {
             static_fields,
             superclass,
         })
+    }
+
+    fn enum_declaration(&mut self) -> anyhow::Result<Stmt> {
+        let name = self.consume(Identifier).context("Expect enum name")?;
+        self.consume(LeftBrace).context("Expect '{'")?;
+
+        let mut variants = vec![];
+        loop {
+            match self.match_token_types(&[Identifier]) {
+                None => break,
+                Some(token) => {
+                    variants.push(token);
+
+                    if self.consume(Comma).is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+        self.consume(RightBrace).context("Expect '}'")?;
+
+        Ok(Stmt::Enum { name, variants })
     }
 
     fn fun(&mut self, is_static_method: bool) -> anyhow::Result<Stmt> {
@@ -604,9 +630,19 @@ impl Parser {
                 Nil => Literal(LiteralValue::Null),
                 String(string) => Literal(LiteralValue::String(string.to_string())),
                 Number(number) => Literal(LiteralValue::Number(*number)),
-                Identifier => Variable {
-                    name: token.clone(),
-                },
+                Identifier => {
+                    let keyword = token.clone();
+                    self.current += 1;
+                    if let Some(_) = self.match_token_types(&[DoubleColon]) {
+                        // parse enum variant pick
+                        let variant = self.consume(Identifier).context("expected enum variant")?;
+                        return Ok(EnumVariant {
+                            enum_name: keyword,
+                            variant_name: variant.clone(),
+                        });
+                    }
+                    return Ok(Variable { name: keyword });
+                }
                 LeftParen => {
                     self.current += 1; // consume
                     let expression = self.expression()?;

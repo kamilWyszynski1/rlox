@@ -1,6 +1,7 @@
 use crate::ast::ast::LiteralValue;
 use crate::interpreter::class::{LoxClass, LoxInstance};
 use crate::interpreter::interpreter::LoxCallable;
+use crate::interpreter::lox_enum::{LoxEnum, LoxEnumVariant};
 use anyhow::{anyhow, bail};
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
@@ -14,6 +15,8 @@ pub enum RuntimeValue {
     Callable(Rc<dyn LoxCallable>),
     Class(LoxClass),
     Instance(LoxInstance),
+    Enum(Rc<LoxEnum>),
+    EnumVariant(LoxEnumVariant),
 }
 
 impl RuntimeValue {
@@ -25,7 +28,9 @@ impl RuntimeValue {
             | RuntimeValue::String(_)
             | RuntimeValue::Callable(_)
             | RuntimeValue::Instance(_)
-            | RuntimeValue::Class(_) => true,
+            | RuntimeValue::Class(_)
+            | RuntimeValue::Enum(_)
+            | RuntimeValue::EnumVariant(_) => true,
             RuntimeValue::Bool(false) | RuntimeValue::Null => false,
         }
     }
@@ -53,6 +58,8 @@ impl Debug for RuntimeValue {
             RuntimeValue::Callable(c) => format!("{:?}", c),
             RuntimeValue::Class(c) => format!("Class {:?}", c),
             RuntimeValue::Instance(instance) => format!("{:?}", instance),
+            RuntimeValue::Enum(e) => format!("{:?}", e),
+            RuntimeValue::EnumVariant(s) => format!("{:?}", s),
         };
         write!(f, "{}", str)
     }
@@ -68,6 +75,8 @@ impl Display for RuntimeValue {
             RuntimeValue::Callable(c) => format!("{}", c),
             RuntimeValue::Class(c) => format!("Class {}", c),
             RuntimeValue::Instance(instance) => format!("{}", instance),
+            RuntimeValue::Enum(e) => format!("{:?}", e),
+            RuntimeValue::EnumVariant(s) => format!("{}", s),
         };
         write!(f, "{}", str)
     }
@@ -99,6 +108,10 @@ impl TryInto<f64> for RuntimeValue {
             RuntimeValue::Callable(_) => bail!("Cannot convert runtime value (Callable) to number"),
             RuntimeValue::Instance(_) => bail!("Cannot convert runtime value (Instance) to number"),
             RuntimeValue::Class(_) => bail!("Cannot convert runtime value (Class) to number"),
+            RuntimeValue::Enum(_) => bail!("Cannot convert runtime value (Enum) to number"),
+            RuntimeValue::EnumVariant(_) => {
+                bail!("Cannot convert runtime value (EnumVariant) to number")
+            }
         }
     }
 }

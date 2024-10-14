@@ -31,6 +31,10 @@ pub enum Stmt {
         // early on in the parser gives us an object that the resolver can hang the resolution information off of.
         superclass: Option<Expr>,
     },
+    Enum {
+        name: Token,
+        variants: Vec<Token>,
+    },
     If {
         condition: Expr,
         then_branch: Box<Stmt>,
@@ -106,6 +110,10 @@ pub enum Expr {
     Get {
         object: Box<Expr>,
         name: Token,
+    },
+    EnumVariant {
+        enum_name: Token,
+        variant_name: Token,
     },
 }
 

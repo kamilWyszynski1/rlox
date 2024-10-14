@@ -140,6 +140,21 @@ test_set_error!(
 "#
 );
 
+test_set!(
+    lox_enum,
+    "examples/enum.lox",
+    r#"Bool::FalseValue
+Bool::TrueValue
+"#
+);
+
+test_set_error!(
+    invalid_enum_variant,
+    "examples/invalid_enum_variant.lox",
+    r#"Error: Invalid enum variant
+"#
+);
+
 #[test]
 fn test_while_loop() -> anyhow::Result<()> {
     let mut cmd = Command::cargo_bin("rlox")?;

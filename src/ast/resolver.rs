@@ -269,6 +269,11 @@ impl Resolver {
                 }
                 self.current_class = enclosing;
             }
+
+            Stmt::Enum { name, variants } => {
+                self.declare(&name, false)?;
+                self.define(&name, false)?;
+            }
         }
         Ok(())
     }
@@ -422,6 +427,13 @@ impl Resolver {
                     }));
                 }
                 self.resolve_local(keyword)?;
+            }
+
+            Expr::EnumVariant {
+                enum_name,
+                variant_name,
+            } => {
+                self.resolve_local(enum_name)?;
             }
         }
         Ok(())

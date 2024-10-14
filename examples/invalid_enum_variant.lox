@@ -1,0 +1,6 @@
+enum Bool {
+    TrueValue,
+    FalseValue,
+}
+
+var b = Bool::FalseValuewd;

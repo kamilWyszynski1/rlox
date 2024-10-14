@@ -1,0 +1,15 @@
+enum Bool {
+    TrueValue,
+    FalseValue,
+}
+
+var a = Bool::FalseValue;
+
+print a;
+
+class Foo {}
+
+var foo = Foo();
+foo.field = Bool::TrueValue;
+
+print foo.field;

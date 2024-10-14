@@ -63,6 +63,7 @@ pub enum TokenType {
     GreaterEqual,
     Less,
     LessEqual,
+    DoubleColon, // ::
 
     Identifier,
     String(String),
@@ -71,6 +72,7 @@ pub enum TokenType {
     And,
     Class,
     Static,
+    Enum,
     Else,
     False,
     Fun,
@@ -94,6 +96,7 @@ lazy_static! {
         m.insert("and", TokenType::And);
         m.insert("class", TokenType::Class);
         m.insert("static", TokenType::Static);
+        m.insert("enum", TokenType::Enum);
         m.insert("else", TokenType::Else);
         m.insert("false", TokenType::False);
         m.insert("for", TokenType::For);

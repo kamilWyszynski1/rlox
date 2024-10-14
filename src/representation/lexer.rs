@@ -100,6 +100,14 @@ impl<'a> Lexer<'a> {
                                 Less
                             }
                         }
+                        ':' => {
+                            if self.match_character(':') {
+                                end += 1;
+                                DoubleColon
+                            } else {
+                                bail!("Invalid character ':'")
+                            }
+                        }
                         '"' => {
                             self.index += 1; // skip opening "
                             self.column += 1;
