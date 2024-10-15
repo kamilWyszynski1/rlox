@@ -350,6 +350,27 @@ impl Interpreter {
                 );
                 Ok(None)
             }
+
+            Stmt::Match {
+                variable_name,
+                operations,
+            } => {
+                let var = self.get_variable(&variable_name)?;
+                let cloned = var.try_borrow()?.clone();
+
+                if let RuntimeValue::EnumVariant(variant) = cloned {
+                    let op = operations
+                        .get(&variant.variant)
+                        .context("no operation for variant")?;
+                    if let Some(info) = self.execute(op.clone())? {
+                        // propagate exec info
+                        return Ok(Some(info));
+                    }
+                } else {
+                    bail!("match cannot be used with anything but enum variant value")
+                }
+                Ok(None)
+            }
         }
     }
 
@@ -604,23 +625,8 @@ impl Interpreter {
                 enum_name,
                 variant_name,
             } => {
-                let key = ExprNameWithLine {
-                    name: enum_name.lexeme.clone(),
-                    line: enum_name.line,
-                    column: enum_name.column,
-                };
-
-                let env = match self.locals.get(&key) {
-                    None => self.globals.clone(),
-                    Some(depth) => self.env_at(*depth)?,
-                };
-
-                let e = env
-                    .try_borrow()?
-                    .get(&enum_name.lexeme)
-                    .context("enum not found")?;
-                let cloned = e.try_borrow()?.clone();
-
+                let var = self.get_variable(&enum_name)?;
+                let cloned = var.try_borrow()?.clone();
                 if let RuntimeValue::Enum(lox_enum) = cloned {
                     if !lox_enum.variants.contains(&variant_name.lexeme) {
                         bail!("Invalid enum variant")
@@ -701,5 +707,23 @@ impl Interpreter {
     pub fn resolve(&mut self, name: String, line: usize, column: usize, depth: usize) {
         self.locals
             .insert(ExprNameWithLine { name, line, column }, depth);
+    }
+
+    fn get_variable(&self, name: &Token) -> anyhow::Result<Rc<RefCell<RuntimeValue>>> {
+        let key = ExprNameWithLine {
+            name: name.lexeme.clone(),
+            line: name.line,
+            column: name.column,
+        };
+
+        let env = match self.locals.get(&key) {
+            None => self.globals.clone(),
+            Some(depth) => self.env_at(*depth)?,
+        };
+        let e = env
+            .try_borrow()?
+            .get(&name.lexeme)
+            .context("enum not found")?;
+        Ok(e)
     }
 }

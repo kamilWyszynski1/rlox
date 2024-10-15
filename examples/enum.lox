@@ -13,3 +13,27 @@ var foo = Foo();
 foo.field = Bool::TrueValue;
 
 print foo.field;
+
+enum Boo {
+    First, Second, Last,
+}
+
+var b = Boo::First;
+
+while (true) {
+    match b {
+        First -> {
+            print "first visit";
+            b = Boo::Second;
+        }
+        Second -> {
+            print "second visit";
+            b = Boo::Last;
+        }
+        Last -> {
+            print "last visit";
+            break;
+        }
+    }
+}
+

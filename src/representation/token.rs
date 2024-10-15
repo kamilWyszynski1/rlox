@@ -64,6 +64,7 @@ pub enum TokenType {
     Less,
     LessEqual,
     DoubleColon, // ::
+    Arrow,       // ->
 
     Identifier,
     String(String),
@@ -88,6 +89,7 @@ pub enum TokenType {
     Var,
     While,
     Break,
+    Match, // match variants of enum value
 }
 
 lazy_static! {
@@ -112,6 +114,7 @@ lazy_static! {
         m.insert("var", TokenType::Var);
         m.insert("while", TokenType::While);
         m.insert("break", TokenType::Break);
+        m.insert("match", TokenType::Match);
         m
     };
 }

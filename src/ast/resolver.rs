@@ -274,6 +274,17 @@ impl Resolver {
                 self.declare(&name, false)?;
                 self.define(&name, false)?;
             }
+
+            Stmt::Match {
+                variable_name,
+                operations,
+            } => {
+                self.resolve_local(&variable_name)?;
+
+                for (_, op) in operations {
+                    self.resolve_stmt(op)?
+                }
+            }
         }
         Ok(())
     }

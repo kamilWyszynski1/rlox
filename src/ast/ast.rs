@@ -1,4 +1,5 @@
 use crate::representation::token::Token;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
@@ -48,6 +49,10 @@ pub enum Stmt {
     Return {
         keyword: Token,
         expr: Option<Expr>,
+    },
+    Match {
+        variable_name: Token,
+        operations: HashMap<String, Stmt>,
     },
 }
 

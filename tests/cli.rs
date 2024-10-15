@@ -145,6 +145,9 @@ test_set!(
     "examples/enum.lox",
     r#"Bool::FalseValue
 Bool::TrueValue
+first visit
+second visit
+last visit
 "#
 );
 

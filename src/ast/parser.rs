@@ -3,6 +3,7 @@ use crate::ast::ast::{Expr, LiteralValue, Stmt};
 use crate::representation::token::TokenType::*;
 use crate::representation::token::{Token, TokenType};
 use anyhow::{bail, Context};
+use std::collections::HashMap;
 
 // Grammar:
 //
@@ -12,7 +13,8 @@ use anyhow::{bail, Context};
 //                | funDecl
 //                | varDecl
 //                | statement
-//                | enumDecl;
+//                | enumDecl
+//                | match;
 //
 // classDecl      → "class" IDENTIFIER ( "<" IDENTIFIER )? "{" ( function | staticMethod | staticField )* "}" ;
 //
@@ -21,6 +23,8 @@ use anyhow::{bail, Context};
 // staticMethod   → "class" function ;
 //
 // enumDecl       → "enum" IDENTIFIER { ( IDENTIFIER )* } ";"
+//
+// match          → "match" IDENTIFIER "{" ( IDENTIFIER "->" block )* "}"
 //
 // funDecl        → "fun" function ;
 // function       → IDENTIFIER "(" parameters? ")" block ;
@@ -68,7 +72,8 @@ use anyhow::{bail, Context};
 // primary        → "true" | "false" | "nil"
 //                | NUMBER | STRING
 //                | "(" expression ")"
-//                | IDENTIFIER | BREAK | "super" "." IDENTIFIER ;
+//                | IDENTIFIER | BREAK | "super" "." IDENTIFIER
+//                | IDENTIFIER "::" IDENTIFIER;
 pub struct Parser {
     tokens: Vec<Token>,
 
@@ -106,13 +111,14 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> anyhow::Result<Stmt> {
-        match self.match_token_types(&[Var, Fun, Class, Enum]) {
+        match self.match_token_types(&[Var, Fun, Class, Enum, Match]) {
             // TODO: synchronize?
             Some(token) => match token.token_type {
                 Var => self.var_declaration(),
                 Fun => self.fun(false),
                 Class => self.class_declaration(),
                 Enum => self.enum_declaration(),
+                Match => self.match_statement(),
                 _ => bail!("unsupported token type in declaration method"),
             },
             None => self.statement(),
@@ -211,6 +217,29 @@ impl Parser {
         self.consume(RightBrace).context("Expect '}'")?;
 
         Ok(Stmt::Enum { name, variants })
+    }
+    fn match_statement(&mut self) -> anyhow::Result<Stmt> {
+        let variable_name = self.consume(Identifier).context("Expect variable name")?;
+        self.consume(LeftBrace).context("Expect '{'")?;
+
+        let mut variant_operations = HashMap::new();
+        loop {
+            match self.match_token_types(&[Identifier]) {
+                Some(variant_token) => {
+                    self.consume(Arrow).context("Expect '->'")?;
+                    self.consume(LeftBrace).context("Expect '{' after '->'")?;
+                    let variant_block = self.block()?;
+                    variant_operations.insert(variant_token.lexeme, variant_block);
+                }
+                None => break,
+            }
+        }
+        self.consume(RightBrace)
+            .context("Expect '}' closing match statement")?;
+        Ok(Stmt::Match {
+            variable_name,
+            operations: variant_operations,
+        })
     }
 
     fn fun(&mut self, is_static_method: bool) -> anyhow::Result<Stmt> {

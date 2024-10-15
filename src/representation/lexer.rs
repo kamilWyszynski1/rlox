@@ -51,7 +51,14 @@ impl<'a> Lexer<'a> {
                         ',' => Comma,
                         '.' => Dot,
                         '+' => Plus,
-                        '-' => Minus,
+                        '-' => {
+                            if self.match_character('>') {
+                                end += 1;
+                                Arrow
+                            } else {
+                                Minus
+                            }
+                        }
                         ';' => Semicolon,
                         '/' => {
                             // check for TokenType::Slash or comment
